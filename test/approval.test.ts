@@ -194,6 +194,9 @@ test("explains bridge failures without retrying", async () => {
     ["not_paired", /\/whatsapp-pair/],
     ["unreachable", /not reachable/],
     ["invalid_request", /rejected/],
+    ["media_not_found", /outbox/],
+    ["unsupported_media", /file type/],
+    ["secret_rejected", /credential/],
   ] as const) {
     let attempts = 0;
     const { controller, reviews } = setup({

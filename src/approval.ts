@@ -83,6 +83,12 @@ function bridgeFailure(error: unknown): string {
       return `The WhatsApp bridge is not reachable or not connected. ${NOT_SENT}`;
     case "invalid_request":
       return `The WhatsApp bridge rejected this message (unsupported recipient or content). ${NOT_SENT}`;
+    case "media_not_found":
+      return `That file is not in the bridge's outbox; the user must copy it there first. ${NOT_SENT}`;
+    case "unsupported_media":
+      return `The bridge does not support this file type for this kind of message. ${NOT_SENT}`;
+    case "secret_rejected":
+      return `The bridge refused this content because it looks like a credential or private key. ${NOT_SENT}`;
     case "busy":
       return `Too many WhatsApp messages are waiting for approval. ${NOT_SENT}`;
     default:
