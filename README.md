@@ -32,7 +32,7 @@ If you decline, Pi is told the message was not sent. Without Pi's interactive te
 3. In Pi, run `/whatsapp-setup` and enter the absolute path of the `whatsapp-mcp` executable. Pi then starts `whatsapp-mcp mcp` for its sessions. Your `settings.json` and `mcp.json` are not changed. If `mcp.json` already defines a `whatsapp` server, it is left alone and takes precedence.
 4. Run `/whatsapp-pair` and follow the steps: run `whatsapp-mcp setup --pair-pi` in a separate terminal, paste the public key Pi shows, and confirm that the fingerprints match.
 
-The pairing lasts up to 8 hours. It ends when Pi quits or reloads, but survives `/new` and `/resume`. Run `/whatsapp-pair` again when needed. `/whatsapp-status` shows the bridge state and whether this session is paired.
+Pairing is needed once per Pi process. It survives `/new` and `/resume`, and ends when Pi quits or reloads; Pi then reminds you to run `/whatsapp-pair` again. It cannot outlive Pi because the approval key is never saved to disk: a saved key could be read and used by the model through Pi's shell tools, bypassing your approval. `/whatsapp-status` shows the bridge state and whether this session is paired.
 
 The extension stores only the bridge path, in `pi-whatsapp.json` in Pi's agent directory. The approval key is never written to disk.
 

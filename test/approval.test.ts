@@ -13,7 +13,7 @@ function fakeClient(signer: SessionSigner, overrides: Partial<BridgeClient> = {}
   let counter = 0;
   const client: BridgeClient = {
     async status() {
-      return { state: "online", connected: true, approver_id: signer.approverID, approver_expires_at: NOW + 3600 };
+      return { state: "online", connected: true, approver_id: signer.approverID};
     },
     async prepare(input) {
       calls.prepare.push(input);

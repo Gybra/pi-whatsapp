@@ -17,7 +17,7 @@ function statusClient(statuses: (RuntimeStatus | Error)[]): BridgeClient & { cal
   return client as never;
 }
 
-const unpaired: RuntimeStatus = { state: "online", connected: true, approver_id: "", approver_expires_at: 0 };
+const unpaired: RuntimeStatus = { state: "online", connected: true, approver_id: ""};
 
 test("instructions show the public key, fingerprint and command, never the private key", () => {
   const signer = createSessionSigner(keyFromSeed(RFC_TEST_SEED));
@@ -27,12 +27,14 @@ test("instructions show the public key, fingerprint and command, never the priva
   assert.ok(text.includes("'/opt/whatsapp mcp/whatsapp-mcp' setup --pair-pi"));
   assert.ok(!text.includes(RFC_TEST_SEED) && !text.includes(Buffer.from(RFC_TEST_SEED, "hex").toString("base64")));
   assert.ok(pairingInstructions(signer, undefined).join("\n").includes("whatsapp-mcp setup --pair-pi"));
+  assert.match(text, /until Pi quits or reloads/);
+  assert.doesNotMatch(text, /hours/);
 });
 
 test("waits until the bridge trusts exactly this session's key", async () => {
   const signer = createSessionSigner();
-  const other = { ...unpaired, approver_id: "0".repeat(64), approver_expires_at: 1 };
-  const mine = { ...unpaired, approver_id: signer.approverID, approver_expires_at: 1 };
+  const other = { ...unpaired, approver_id: "0".repeat(64)};
+  const mine = { ...unpaired, approver_id: signer.approverID};
   const client = statusClient([unpaired, new BridgeError("unreachable"), other, mine]);
   assert.equal(await waitForPairing(client, signer.approverID, AbortSignal.timeout(5000), 1), true);
   assert.equal(client.calls, 4);
@@ -68,6 +70,6 @@ test("the pairing screen needs an interactive TUI and closes on Escape or succes
   assert.equal(await Promise.race([escaped, quickly]), false, "Escape closes the pairing screen at once");
   view!.dispose?.();
 
-  const paired = runPairing(ctx as never, statusClient([{ ...unpaired, approver_id: signer.approverID, approver_expires_at: 1 }]), signer, undefined, 1);
+  const paired = runPairing(ctx as never, statusClient([{ ...unpaired, approver_id: signer.approverID}]), signer, undefined, 1);
   assert.equal(await paired, true);
 });

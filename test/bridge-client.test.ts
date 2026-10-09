@@ -101,14 +101,14 @@ test("can be aborted", async () => {
 });
 
 test("validates status responses", async () => {
-  const good = { state: "online", connected: true, approver_id: "a".repeat(64), approver_expires_at: 1_800_000_000 };
+  const good = { state: "online", connected: true, approver_id: "a".repeat(64)};
   const bridge = await fakeBridge((_req, res) => json(res, 200, good));
   try {
     assert.deepEqual(await bridge.client.status(AbortSignal.timeout(5000)), good);
   } finally {
     bridge.close();
   }
-  for (const bad of [{ ...good, state: "hacked" }, { ...good, connected: "yes" }, { ...good, extra: 1 }, []]) {
+  for (const bad of [{ ...good, state: "hacked" }, { ...good, connected: "yes" }, { ...good, approver_expires_at: 1 }, []]) {
     const other = await fakeBridge((_req, res) => json(res, 200, bad));
     try {
       await assert.rejects(other.client.status(AbortSignal.timeout(5000)), BridgeError);

@@ -24,7 +24,7 @@ export function pairingInstructions(signer: SessionSigner, bridgePath: string | 
     "3. Type yes only if the terminal shows this fingerprint:",
     `   ${signer.approverID}`,
     "",
-    "The pairing lasts up to 8 hours and ends when Pi quits or reloads.",
+    "The pairing lasts until Pi quits or reloads.",
   ];
 }
 

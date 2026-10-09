@@ -61,11 +61,23 @@ export function setup(pi: ExtensionAPI, deps: Deps): void {
     registeredBridge = bridgePath;
   }
 
+  /** Reminds the user to pair, without holding up Pi's startup for more than a moment. */
+  async function remindToPair(ctx: ExtensionContext, current: SessionSigner): Promise<void> {
+    const check = (async () => {
+      const status = await (await getClient()).status(AbortSignal.timeout(1500));
+      return status.approver_id === current.approverID;
+    })();
+    const paired = await Promise.race([check, new Promise<undefined>((resolve) => setTimeout(resolve, 1500))]).catch(() => undefined);
+    if (paired === false) ctx.ui.notify("WhatsApp: run /whatsapp-pair to approve outgoing messages from this Pi session.", "info");
+  }
+
   pi.on("session_start", async (_event, ctx) => {
     signer ??= deps.createSigner();
     try {
       const config = await loadConfig(configPath(deps.agentDir));
-      if (config) await registerBridge(ctx, config.bridgePath);
+      if (!config) return;
+      await registerBridge(ctx, config.bridgePath);
+      if (ctx.hasUI) await remindToPair(ctx, signer);
     } catch (error) {
       ctx.ui.notify((error as Error).message, "warning");
     }
@@ -145,7 +157,7 @@ export function setup(pi: ExtensionAPI, deps: Deps): void {
         const status = await (await getClient()).status(AbortSignal.timeout(5000));
         const pairing =
           signer && status.approver_id === signer.approverID
-            ? `paired with this session until ${new Date(status.approver_expires_at * 1000).toLocaleTimeString()}`
+            ? "paired with this session"
             : status.approver_id
               ? "paired with another Pi session"
               : "not paired (run /whatsapp-pair)";

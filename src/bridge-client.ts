@@ -13,7 +13,6 @@ export type RuntimeStatus = {
   state: (typeof STATES)[number];
   connected: boolean;
   approver_id: string;
-  approver_expires_at: number;
 };
 
 export type BridgeClient = {
@@ -114,11 +113,10 @@ function parseStatus(value: unknown): RuntimeStatus {
   const s = value as Record<string, unknown>;
   const valid =
     typeof value === "object" && value !== null && !Array.isArray(value) &&
-    Object.keys(s).sort().join() === "approver_expires_at,approver_id,connected,state" &&
+    Object.keys(s).sort().join() === "approver_id,connected,state" &&
     STATES.includes(s.state as RuntimeStatus["state"]) &&
     typeof s.connected === "boolean" &&
-    typeof s.approver_id === "string" && /^([0-9a-f]{64})?$/.test(s.approver_id) &&
-    Number.isSafeInteger(s.approver_expires_at);
+    typeof s.approver_id === "string" && /^([0-9a-f]{64})?$/.test(s.approver_id);
   if (!valid) throw new BridgeError("bad_response");
   return s as RuntimeStatus;
 }

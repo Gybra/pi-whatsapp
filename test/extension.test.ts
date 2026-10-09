@@ -50,7 +50,7 @@ function fakeDeps(options: { connectError?: boolean; approverMatches?: boolean }
     connect: (): BridgeClient => {
       if (options.connectError) throw new Error("no token");
       return {
-        status: async () => ({ state: "online", connected: true, approver_id: options.approverMatches === false ? "0".repeat(64) : signers[0].approverID, approver_expires_at: 0 }),
+        status: async () => ({ state: "online", connected: true, approver_id: options.approverMatches === false ? "0".repeat(64) : signers[0].approverID}),
         prepare: async () => {
           throw new Error("not used");
         },
@@ -189,4 +189,27 @@ test("pairing and status commands refuse outside the interactive TUI", async () 
     await command(name, "", { mode: "rpc", hasUI: true, cwd: tmpdir(), ui: { notify: (m: string) => notes.push(m), input: () => assert.fail(), confirm: () => assert.fail(), custom: () => assert.fail() } });
     assert.match(notes.join("\n"), /interactive/, name);
   }
+});
+
+test("reminds the user to pair when the bridge is configured but this session is not paired", async () => {
+  for (const [configured, matches, expected] of [[true, false, true], [true, true, false], [false, false, false]] as const) {
+    const { pi, emit } = fakePi();
+    const fake = fakeDeps({ approverMatches: matches });
+    if (configured) writeFileSync(join(fake.deps.agentDir, "pi-whatsapp.json"), JSON.stringify({ bridgePath: process.execPath }));
+    setup(pi as never, fake.deps);
+    const { ctx, notes } = commandCtx({});
+    await emit("session_start", { type: "session_start", reason: "startup" }, ctx);
+    assert.equal(notes.some((note) => /\/whatsapp-pair/.test(note)), expected, `configured ${configured}, paired ${matches}`);
+  }
+});
+
+test("the startup reminder never blocks on an unreachable bridge", async () => {
+  const { pi, emit } = fakePi();
+  const fake = fakeDeps();
+  fake.deps.connect = () => ({ status: () => new Promise(() => {}) }) as never; // hangs forever
+  writeFileSync(join(fake.deps.agentDir, "pi-whatsapp.json"), JSON.stringify({ bridgePath: process.execPath }));
+  setup(pi as never, fake.deps);
+  const started = Date.now();
+  await emit("session_start", { type: "session_start", reason: "startup" }, commandCtx({}).ctx);
+  assert.ok(Date.now() - started < 3000, "session start waited too long for the bridge");
 });
