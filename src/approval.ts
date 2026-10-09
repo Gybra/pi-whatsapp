@@ -76,7 +76,7 @@ function bridgeFailure(error: unknown): string {
   const code = error instanceof BridgeError ? error.code : "";
   switch (code) {
     case "not_paired":
-      return `This Pi session is not paired with the WhatsApp bridge; ask the user to run /whatsapp-pair. ${NOT_SENT}`;
+      return `This Pi session is not paired with the WhatsApp bridge, so it cannot approve messages; the user can run /whatsapp-pair. ${NOT_SENT}`;
     case "unreachable":
     case "offline":
     case "timeout":
@@ -108,8 +108,19 @@ export function createApprovalController(
   signer: SessionSigner,
   review: Review,
   now: () => number = () => Math.floor(Date.now() / 1000),
+  ensurePaired?: (ctx: ExtensionContext) => Promise<boolean>,
 ): ApprovalController {
   let active: AbortController | undefined;
+
+  // The bridge only drafts for a paired session: pair once, with the user's consent, then retry.
+  async function prepare(input: SendInput, signal: AbortSignal, ctx: ExtensionContext): Promise<unknown> {
+    try {
+      return await client.prepare(input, signal);
+    } catch (error) {
+      if (!(error instanceof BridgeError && error.code === "not_paired") || !ensurePaired || !(await ensurePaired(ctx))) throw error;
+      return client.prepare(input, signal);
+    }
+  }
 
   async function cancelDraft(draftID: string | undefined): Promise<void> {
     if (draftID) await client.cancel(draftID, AbortSignal.timeout(5000)).catch(() => {});
@@ -132,7 +143,7 @@ export function createApprovalController(
       const turn = AbortSignal.any(ctx.signal ? [cancel.signal, ctx.signal] : [cancel.signal]);
       let draftID: string | undefined;
       try {
-        const draft = decodeDraft(await client.prepare(sendInput, turn), signer, now());
+        const draft = decodeDraft(await prepare(sendInput, turn, ctx), signer, now());
         draftID = draft.payload.draft_id;
         const signal = AbortSignal.any([turn, AbortSignal.timeout((draft.payload.expires_at - now()) * 1000)]);
         const preview = draft.payload.attachment ? await client.preview(draftID, signal) : undefined;

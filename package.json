@@ -22,12 +22,13 @@
   "files": [
     "extensions",
     "src",
+    "bridge-release.json",
     "README.md",
     "LICENSE",
     "SECURITY.md"
   ],
   "scripts": {
-    "test": "node --test test/*.test.ts",
+    "test": "node --test --test-timeout=30000 test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "pi": {

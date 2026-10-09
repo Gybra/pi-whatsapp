@@ -37,7 +37,7 @@ function fakeClient(signer: SessionSigner, overrides: Partial<BridgeClient> = {}
 
 type Review = (ctx: unknown, draft: ReviewedDraft, signal: AbortSignal, preview?: Uint8Array) => Promise<boolean>;
 
-function setup(options: { review?: Review; client?: Partial<BridgeClient>; now?: () => number } = {}) {
+function setup(options: { review?: Review; client?: Partial<BridgeClient>; now?: () => number; ensurePaired?: () => Promise<boolean> } = {}) {
   const signer = createSessionSigner();
   const { client, calls } = fakeClient(signer, options.client);
   const reviews: { draft: ReviewedDraft; signal: AbortSignal; preview?: Uint8Array }[] = [];
@@ -45,7 +45,7 @@ function setup(options: { review?: Review; client?: Partial<BridgeClient>; now?:
     reviews.push({ draft, signal, preview });
     return options.review ? options.review(ctx, draft, signal, preview) : true;
   };
-  const controller = createApprovalController(client, signer, review as never, options.now ?? (() => NOW));
+  const controller = createApprovalController(client, signer, review as never, options.now ?? (() => NOW), options.ensurePaired);
   return { signer, controller, calls, reviews };
 }
 
@@ -222,5 +222,64 @@ test("rejects a draft that is not bound to this session's key", async () => {
     client: { prepare: async (input) => wireFor({ version: 1, draft_id: "1".repeat(32), recipient_jid: "x@s.whatsapp.net", message: input.message, kind: "text", attachment: null, expires_at: NOW + 120 }, other.publicKeyB64) },
   });
   assert.equal((await controller.handle(sendEvent({ recipient: "12025550123", message: "hi" }) as never, tuiCtx()))?.block, true);
+  assert.equal(reviews.length, 0);
+});
+
+test("pairs the session once, with the user's consent, when the bridge does not trust it yet", async () => {
+  let paired = false;
+  let asked = 0;
+  let sessionSigner: SessionSigner | undefined;
+  const h = setup({
+    ensurePaired: async () => {
+      asked++;
+      paired = true;
+      return true;
+    },
+    client: {
+      async prepare(input, signal) {
+        if (!paired) throw new BridgeError("not_paired");
+        return fakeClient(sessionSigner!).client.prepare(input, signal);
+      },
+    },
+  });
+  sessionSigner = h.signer;
+  const event = sendEvent({ recipient: "12025550123", message: "hi" });
+  assert.equal(await h.controller.handle(event as never, tuiCtx()), undefined);
+  assert.equal(asked, 1);
+  assert.equal(h.reviews.length, 1, "after pairing, the message is still reviewed");
+  assert.ok(event.input.approval, "approved after review");
+  await h.controller.handle(sendEvent({ recipient: "12025550123", message: "again" }) as never, tuiCtx());
+  assert.equal(asked, 1, "pairing is asked once, not for every message");
+});
+
+test("only a not_paired refusal asks to pair", async () => {
+  let asked = 0;
+  const { controller } = setup({
+    ensurePaired: async () => (asked++, true),
+    client: {
+      async prepare() {
+        throw new BridgeError("unreachable");
+      },
+    },
+  });
+  assert.equal((await controller.handle(sendEvent({ recipient: "12025550123", message: "hi" }) as never, tuiCtx()))?.block, true);
+  assert.equal(asked, 0);
+});
+
+test("a declined pairing blocks the send without retrying", async () => {
+  let prepares = 0;
+  const { controller, reviews } = setup({
+    ensurePaired: async () => false,
+    client: {
+      async prepare() {
+        prepares++;
+        throw new BridgeError("not_paired");
+      },
+    },
+  });
+  const result = await controller.handle(sendEvent({ recipient: "12025550123", message: "hi" }) as never, tuiCtx());
+  assert.equal(result?.block, true);
+  assert.match(result?.reason ?? "", /not paired|pair/i);
+  assert.equal(prepares, 1);
   assert.equal(reviews.length, 0);
 });

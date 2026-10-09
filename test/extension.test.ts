@@ -1,14 +1,61 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { setup } from "../extensions/index.ts";
+import { setup, type Deps } from "../extensions/index.ts";
 import { createSessionSigner } from "../src/approval.ts";
-import type { BridgeClient } from "../src/bridge-client.ts";
+import { BridgeError, type BridgeClient } from "../src/bridge-client.ts";
+import type { BridgeRelease } from "../src/install.ts";
 import type { SessionSigner } from "../src/protocol.ts";
+import { fakeBridge } from "./fake-bridge.ts";
+import { textPayload, wireFor } from "./helpers.ts";
 
+const posix = { skip: process.platform === "win32" };
 type Handler = (event: unknown, ctx: unknown) => unknown;
+type State = { running: boolean; linked: boolean; autostart: boolean; approver: string };
+
+/** A whatsapp-mcp stand-in that keeps its state in a file and logs every command. */
+function statefulBridge(initial: Partial<State> = {}) {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "pi-whatsapp-state-")), "state.json");
+  writeFileSync(stateFile, JSON.stringify({ running: false, linked: false, autostart: false, approver: "", ...initial }));
+  const path = fakeBridge(`
+    const fs = require("fs");
+    const file = ${JSON.stringify(stateFile)};
+    const st = JSON.parse(fs.readFileSync(file, "utf8"));
+    const save = () => fs.writeFileSync(file, JSON.stringify(st));
+    fs.appendFileSync(file + ".log", args.join(" ") + "\\n");
+    const say = (e) => console.log(JSON.stringify(e));
+    switch (args[0]) {
+      case "status":
+        say({ version: "0.1.0", running: st.running, state: st.running ? (st.linked ? "online" : "unpaired") : "stopped", connected: st.running && st.linked,
+          linked: st.linked, approver_id: st.approver, autostart: st.autostart, data_dir: "/data", log_file: "/data/bridge.log" });
+        return;
+      case "start": st.running = true; save(); return;
+      case "stop": st.running = false; save(); return;
+      case "autostart": st.autostart = args[1] === "enable"; st.running = st.autostart; save(); return;
+      case "link":
+        if (st.running) { console.error("Error: the bridge is running; stop it first"); process.exit(1); }
+        say({ event: "qr", modules: ["0000", "0110", "0110", "0000"], expires_in: 60 });
+        st.linked = true; save();
+        say({ event: "linked", message: "This computer is now linked to WhatsApp." });
+        process.exit(0);
+      case "pair-pi":
+        process.stdin.on("end", () => {
+          st.approver = require("crypto").createHash("sha256").update(Buffer.from(input.trim(), "base64")).digest("hex");
+          save();
+          say({ approver_id: st.approver });
+        });
+        return;
+    }
+    console.error("Error: unknown command"); process.exit(2);`);
+  return {
+    path,
+    state: () => JSON.parse(readFileSync(stateFile, "utf8")) as State,
+    commands: () => (existsSync(stateFile + ".log") ? readFileSync(stateFile + ".log", "utf8").trim().split("\n") : []),
+  };
+}
 
 function fakePi() {
   const handlers = new Map<string, Handler>();
@@ -33,66 +80,216 @@ function fakePi() {
     pi,
     registered,
     command: (name: string, args: string, ctx: unknown) => commands.get(name)!(args, ctx),
-    emit: (name: string, event: unknown, ctx: unknown = { mode: "tui", hasUI: true, cwd: tmpdir(), ui: { notify() {} } }) => handlers.get(name)?.(event, ctx),
+    emit: (name: string, event: unknown, ctx: unknown = uiCtx().ctx) => handlers.get(name)?.(event, ctx),
   };
 }
 
-function fakeDeps(options: { connectError?: boolean; approverMatches?: boolean } = {}) {
+function uiCtx(answers: { input?: string; confirm?: boolean[]; select?: string[] } = {}, mode = "tui") {
+  const notes: string[] = [];
+  const asked: string[] = [];
+  const confirms = [...(answers.confirm ?? [])];
+  const selects = [...(answers.select ?? [])];
+  const ctx = {
+    mode,
+    hasUI: mode !== "print" && mode !== "json",
+    cwd: mkdtempSync(join(tmpdir(), "pi-whatsapp-project-")),
+    ui: {
+      input: async () => answers.input,
+      confirm: async (title: string) => (asked.push(title), confirms.shift() ?? false),
+      select: async (title: string, options: string[]) => {
+        asked.push(title);
+        const wanted = selects.shift();
+        return options.find((o) => wanted !== undefined && o.startsWith(wanted));
+      },
+      notify: (message: string) => notes.push(message),
+      // The QR screen: run the real component until the link process finishes.
+      custom: (factory: (...a: unknown[]) => unknown) =>
+        new Promise((resolve) => factory({ terminal: { rows: 60 }, requestRender() {} }, { fg: (_c: string, t: string) => t, bold: (t: string) => t }, {}, resolve)),
+    },
+  };
+  return { ctx, notes, asked };
+}
+
+function deps(options: { client?: Partial<BridgeClient>; release?: BridgeRelease; fetchImpl?: typeof fetch } = {}) {
   const signers: SessionSigner[] = [];
   let revoked = 0;
-  const deps = {
-    agentDir: mkdtempSync(join(tmpdir(), "pi-whatsapp-agent-")),
+  const agentDir = mkdtempSync(join(tmpdir(), "pi-whatsapp-agent-"));
+  const value: Deps = {
+    agentDir,
+    dataDir: () => join(agentDir, "bridge-data"),
+    release: options.release ?? { version: null, assets: {} },
+    platform: process.platform,
+    arch: process.arch,
+    fetchImpl: options.fetchImpl,
     createSigner: () => {
       const signer = createSessionSigner();
       signers.push(signer);
       return signer;
     },
-    connect: (): BridgeClient => {
-      if (options.connectError) throw new Error("no token");
-      return {
-        status: async () => ({ state: "online", connected: true, approver_id: options.approverMatches === false ? "0".repeat(64) : signers[0].approverID}),
-        prepare: async () => {
-          throw new Error("not used");
-        },
-        cancel: async () => {},
-        revoke: async () => {
-          revoked++;
-        },
-        preview: async () => new Uint8Array(),
-      };
-    },
+    connect: (): BridgeClient => ({
+      status: async () => ({ state: "online", connected: true, approver_id: signers[0]?.approverID ?? "" }),
+      prepare: async () => {
+        throw new BridgeError("unreachable");
+      },
+      cancel: async () => {},
+      revoke: async () => {
+        revoked++;
+      },
+      preview: async () => new Uint8Array(),
+      ...options.client,
+    }),
   };
-  return { deps, signers, revoked: () => revoked };
+  return { deps: value, signers, revoked: () => revoked };
 }
 
 const outgoing = () => ({ type: "tool_call", toolCallId: "1", toolName: "mcp__whatsapp__send_message", input: { recipient: "12025550123", message: "hi", approval: { draft_id: "x", signature_b64: "y" } } });
+const start = { type: "session_start", reason: "startup" };
 
-test("registers no tools and blocks sends until a session has started", async () => {
+test("registers no tools and blocks sends until set up", async () => {
   const { pi, emit } = fakePi();
-  setup(pi as never, fakeDeps().deps);
-  const event = outgoing();
-  const result = (await emit("tool_call", event)) as { block?: boolean };
-  assert.equal(result?.block, true);
-  assert.equal("approval" in event.input, false);
-});
-
-test("blocks sends with a clear reason when the bridge is not set up", async () => {
-  const { pi, emit } = fakePi();
-  setup(pi as never, fakeDeps({ connectError: true }).deps);
-  await emit("session_start", { type: "session_start", reason: "startup" });
+  setup(pi as never, deps().deps);
   const event = outgoing();
   const result = (await emit("tool_call", event)) as { block?: boolean; reason?: string };
   assert.equal(result?.block, true);
-  assert.match(result?.reason ?? "", /not set up.*nothing was sent/i);
   assert.equal("approval" in event.input, false);
+  await emit("session_start", start);
+  assert.match(((await emit("tool_call", outgoing())) as { reason: string }).reason, /\/whatsapp-setup.*Nothing was sent/);
+});
+
+test("/whatsapp-setup links, starts the bridge and registers the MCP server", posix, async () => {
+  const bridge = statefulBridge();
+  const { pi, registered, command } = fakePi();
+  const d = deps();
+  setup(pi as never, d.deps);
+  const settings = join(d.deps.agentDir, "settings.json");
+  writeFileSync(settings, '{"packages":[]}');
+  const { ctx, notes } = uiCtx({ confirm: [true, true], select: ["Start automatically"] });
+  await command("whatsapp-setup", bridge.path, ctx);
+  assert.deepEqual(bridge.state(), { running: true, linked: true, autostart: true, approver: "" });
+  assert.deepEqual(registered, [{ name: "whatsapp", config: { command: bridge.path, args: ["mcp"], timeout: 180, exposure: "codemode" } }]);
+  assert.deepEqual(JSON.parse(readFileSync(join(d.deps.agentDir, "pi-whatsapp.json"), "utf8")), { bridgePath: bridge.path });
+  assert.equal(readFileSync(settings, "utf8"), '{"packages":[]}', "Pi settings are not modified");
+  assert.match(notes.join("\n"), /ready/i);
+});
+
+test("/whatsapp-setup stops an unlinked bridge before linking and leaves a linked one alone", posix, async () => {
+  const unlinked = statefulBridge({ running: true });
+  const one = fakePi();
+  setup(one.pi as never, deps().deps);
+  await one.command("whatsapp-setup", unlinked.path, uiCtx({ confirm: [true, true], select: ["Start it now"] }).ctx);
+  assert.deepEqual(unlinked.commands().filter((c) => !c.startsWith("status")), ["stop", "link --json", "start"]);
+  assert.equal(unlinked.state().autostart, false);
+
+  const linked = statefulBridge({ running: true, linked: true, autostart: true });
+  const two = fakePi();
+  setup(two.pi as never, deps().deps);
+  const { ctx, asked } = uiCtx({ confirm: [true] });
+  await two.command("whatsapp-setup", linked.path, ctx);
+  assert.deepEqual(linked.commands().filter((c) => !c.startsWith("status")), [], "nothing to do for a running, linked bridge");
+  assert.ok(!asked.some((q) => /Link/.test(q)), "no relinking offered");
+});
+
+test("/whatsapp-setup changes nothing when the user declines or the path is unusable", posix, async () => {
+  const bridge = statefulBridge();
+  for (const [args, answers] of [
+    [bridge.path, { confirm: [false] }],
+    [bridge.path, { confirm: [true, false] }], // accepts the bridge, declines linking
+    ["relative/whatsapp-mcp", { confirm: [true] }],
+    ["", { select: ["Use an existing"], input: undefined }],
+  ] as const) {
+    const { pi, registered, command } = fakePi();
+    const d = deps();
+    setup(pi as never, d.deps);
+    await command("whatsapp-setup", args, uiCtx(answers as never).ctx);
+    if ((answers as unknown as { confirm?: boolean[] }).confirm?.[0] !== true) {
+      assert.equal(registered.length, 0, JSON.stringify(args));
+      assert.equal(existsSync(join(d.deps.agentDir, "pi-whatsapp.json")), false);
+    }
+  }
+  assert.deepEqual(bridge.commands().filter((c) => !c.startsWith("status")), []);
+});
+
+test("/whatsapp-setup downloads a verified bridge when a release is available", posix, async () => {
+  const bridge = statefulBridge({ linked: true, running: true });
+  const binary = readFileSync(bridge.path);
+  const os = { darwin: "darwin", linux: "linux", win32: "windows" }[process.platform as "darwin"];
+  const cpu = { arm64: "arm64", x64: "amd64" }[process.arch as "arm64"];
+  const release: BridgeRelease = { version: "9.9.9", assets: { [`${os}-${cpu}`]: { file: `whatsapp-mcp-${os}-${cpu}`, sha256: createHash("sha256").update(binary).digest("hex") } } };
+  const urls: string[] = [];
+  const fetchImpl = (async (url: string) => (urls.push(url), new Response(binary))) as unknown as typeof fetch;
+  const { pi, registered, command } = fakePi();
+  const d = deps({ release, fetchImpl });
+  setup(pi as never, d.deps);
+  await command("whatsapp-setup", "", uiCtx({ select: ["Download"], confirm: [] }).ctx);
+  const installed = join(d.deps.agentDir, "pi-whatsapp-bridge", "9.9.9", "whatsapp-mcp");
+  assert.deepEqual(urls, [`https://github.com/Gybra/whatsapp-mcp/releases/download/v9.9.9/whatsapp-mcp-${os}-${cpu}`]);
+  assert.deepEqual(registered, [{ name: "whatsapp", config: { command: installed, args: ["mcp"], timeout: 180, exposure: "codemode" } }]);
+});
+
+test("a configured bridge is registered at session start unless mcp.json already defines whatsapp", async () => {
+  for (const conflict of [false, true]) {
+    const { pi, registered, emit } = fakePi();
+    const d = deps();
+    writeFileSync(join(d.deps.agentDir, "pi-whatsapp.json"), JSON.stringify({ bridgePath: process.execPath }));
+    const mcpFile = join(d.deps.agentDir, "mcp.json");
+    const mcpContent = JSON.stringify({ mcpServers: { whatsapp: { command: "/usr/bin/uv", args: ["run", "main.py"] } } });
+    if (conflict) writeFileSync(mcpFile, mcpContent);
+    setup(pi as never, d.deps);
+    const { ctx, notes } = uiCtx();
+    await emit("session_start", start, ctx);
+    assert.equal(registered.length, conflict ? 0 : 1);
+    if (conflict) {
+      assert.match(notes.join("\n"), /already defines a "whatsapp" server/);
+      assert.equal(readFileSync(mcpFile, "utf8"), mcpContent);
+    }
+  }
+});
+
+test("/whatsapp-pair trusts this session's key after confirmation", posix, async () => {
+  const bridge = statefulBridge({ running: true, linked: true });
+  const { pi, emit, command } = fakePi();
+  const d = deps();
+  writeFileSync(join(d.deps.agentDir, "pi-whatsapp.json"), JSON.stringify({ bridgePath: bridge.path }));
+  setup(pi as never, d.deps);
+  await emit("session_start", start);
+  await command("whatsapp-pair", "", uiCtx({ confirm: [false] }).ctx);
+  assert.equal(bridge.state().approver, "", "declined");
+  const { ctx, notes } = uiCtx({ confirm: [true] });
+  await command("whatsapp-pair", "", ctx);
+  assert.equal(bridge.state().approver, d.signers[0].approverID);
+  assert.match(notes.join("\n"), /can now approve/);
+});
+
+test("the first send asks once to pair the session, then reviews the message", posix, async () => {
+  const bridge = statefulBridge({ running: true, linked: true });
+  let signer: SessionSigner | undefined;
+  const d = deps({
+    client: {
+      prepare: async () => {
+        if (bridge.state().approver !== signer!.approverID) throw new BridgeError("not_paired");
+        return wireFor(textPayload({ expires_at: Math.floor(Date.now() / 1000) + 120 }), signer!.publicKeyB64);
+      },
+    },
+  });
+  writeFileSync(join(d.deps.agentDir, "pi-whatsapp.json"), JSON.stringify({ bridgePath: bridge.path }));
+  const { pi, emit } = fakePi();
+  setup(pi as never, d.deps);
+  await emit("session_start", start);
+  signer = d.signers[0];
+  const { ctx, asked } = uiCtx({ confirm: [true] });
+  (ctx.ui as Record<string, unknown>).custom = async () => false; // the user cancels the review
+  const result = (await emit("tool_call", outgoing(), ctx)) as { block?: boolean; reason?: string };
+  assert.ok(asked.some((q) => /approve WhatsApp messages/.test(q)), "pairing consent asked");
+  assert.equal(bridge.state().approver, signer.approverID);
+  assert.match(result.reason ?? "", /declined/, "the message itself still went through review");
 });
 
 test("keeps the session key across new sessions and revokes it on quit or reload", async () => {
   for (const reason of ["quit", "reload"]) {
     const { pi, emit } = fakePi();
-    const fake = fakeDeps();
+    const fake = deps();
     setup(pi as never, fake.deps);
-    await emit("session_start", { type: "session_start", reason: "startup" });
+    await emit("session_start", start);
     await emit("session_shutdown", { type: "session_shutdown", reason: "new" });
     await emit("session_start", { type: "session_start", reason: "new" });
     assert.equal(fake.signers.length, 1, "a new session in the same Pi process keeps the pairing");
@@ -105,111 +302,43 @@ test("keeps the session key across new sessions and revokes it on quit or reload
 
 test("does not revoke an approver paired by another Pi session", async () => {
   const { pi, emit } = fakePi();
-  const fake = fakeDeps({ approverMatches: false });
+  const fake = deps({ client: { status: async () => ({ state: "online", connected: true, approver_id: "0".repeat(64) }) } });
   setup(pi as never, fake.deps);
-  await emit("session_start", { type: "session_start", reason: "startup" });
+  await emit("session_start", start);
   await emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
   assert.equal(fake.revoked(), 0);
 });
 
-test("leaves non-WhatsApp tools alone", async () => {
+test("blocks the model from the bridge's credentials, even before a session starts", async () => {
   const { pi, emit } = fakePi();
-  setup(pi as never, fakeDeps().deps);
-  await emit("session_start", { type: "session_start", reason: "startup" });
-  assert.equal(await emit("tool_call", { type: "tool_call", toolCallId: "1", toolName: "bash", input: { command: "ls" } }), undefined);
+  const d = deps();
+  setup(pi as never, d.deps);
+  const read = { type: "tool_call", toolCallId: "1", toolName: "read", input: { path: join(d.deps.dataDir(), "api-token") } };
+  assert.equal(((await emit("tool_call", read)) as { block?: boolean })?.block, true);
+  const pair = { type: "tool_call", toolCallId: "2", toolName: "bash", input: { command: "echo KEY | whatsapp-mcp pair-pi" } };
+  assert.equal(((await emit("tool_call", pair)) as { block?: boolean })?.block, true);
+  assert.equal(await emit("tool_call", { type: "tool_call", toolCallId: "3", toolName: "bash", input: { command: "ls" } }), undefined);
 });
 
-function commandCtx(answers: { input?: string; confirm?: boolean }, cwd = mkdtempSync(join(tmpdir(), "pi-whatsapp-project-"))) {
-  const notes: string[] = [];
-  return {
-    notes,
-    ctx: {
-      mode: "tui",
-      hasUI: true,
-      cwd,
-      ui: { input: async () => answers.input, confirm: async () => answers.confirm ?? false, notify: (message: string) => notes.push(message) },
-    },
-  };
-}
-
-test("/whatsapp-setup saves the bridge path and registers a session-only MCP server", async () => {
-  const { pi, registered, command, emit } = fakePi();
-  const fake = fakeDeps();
-  setup(pi as never, fake.deps);
-  const settings = join(fake.deps.agentDir, "settings.json");
-  writeFileSync(settings, '{"packages":[]}');
-  const bridge = process.execPath; // any absolute executable stands in for the bridge
-  const { ctx, notes } = commandCtx({ input: bridge, confirm: true });
-  await command("whatsapp-setup", "", ctx);
-  assert.deepEqual(registered, [{ name: "whatsapp", config: { command: bridge, args: ["mcp"], timeout: 180, exposure: "codemode" } }]);
-  assert.deepEqual(JSON.parse(readFileSync(join(fake.deps.agentDir, "pi-whatsapp.json"), "utf8")), { bridgePath: bridge });
-  assert.equal(readFileSync(settings, "utf8"), '{"packages":[]}', "Pi settings are not modified");
-  assert.match(notes.join("\n"), /\/whatsapp-pair/);
-
-  await emit("session_start", { type: "session_start", reason: "new" }, ctx);
-  assert.equal(registered.length, 1, "registration is not repeated");
-});
-
-test("/whatsapp-setup changes nothing without confirmation or a valid executable", async () => {
-  for (const answers of [{ input: process.execPath, confirm: false }, { input: "relative/whatsapp-mcp", confirm: true }, { input: undefined }]) {
-    const { pi, registered, command } = fakePi();
-    const fake = fakeDeps();
-    setup(pi as never, fake.deps);
-    await command("whatsapp-setup", "", commandCtx(answers).ctx);
-    assert.equal(registered.length, 0, JSON.stringify(answers));
-    assert.throws(() => readFileSync(join(fake.deps.agentDir, "pi-whatsapp.json")));
-  }
-});
-
-test("a configured bridge is registered at session start unless mcp.json already defines whatsapp", async () => {
-  for (const conflict of [false, true]) {
-    const { pi, registered, emit } = fakePi();
-    const fake = fakeDeps();
-    writeFileSync(join(fake.deps.agentDir, "pi-whatsapp.json"), JSON.stringify({ bridgePath: process.execPath }));
-    const mcpFile = join(fake.deps.agentDir, "mcp.json");
-    const mcpContent = JSON.stringify({ mcpServers: { whatsapp: { command: "/usr/bin/uv", args: ["run", "main.py"] } } });
-    if (conflict) writeFileSync(mcpFile, mcpContent);
-    setup(pi as never, fake.deps);
-    const { ctx, notes } = commandCtx({});
-    await emit("session_start", { type: "session_start", reason: "startup" }, ctx);
-    assert.equal(registered.length, conflict ? 0 : 1);
-    if (conflict) {
-      assert.match(notes.join("\n"), /already defines a "whatsapp" server/);
-      assert.equal(readFileSync(mcpFile, "utf8"), mcpContent);
-    }
-  }
-});
-
-test("pairing and status commands refuse outside the interactive TUI", async () => {
+test("commands refuse outside the interactive TUI", async () => {
   const { pi, command, emit } = fakePi();
-  setup(pi as never, fakeDeps().deps);
-  await emit("session_start", { type: "session_start", reason: "startup" });
+  setup(pi as never, deps().deps);
+  await emit("session_start", start);
   for (const name of ["whatsapp-pair", "whatsapp-setup"]) {
-    const notes: string[] = [];
-    await command(name, "", { mode: "rpc", hasUI: true, cwd: tmpdir(), ui: { notify: (m: string) => notes.push(m), input: () => assert.fail(), confirm: () => assert.fail(), custom: () => assert.fail() } });
+    const { ctx, notes } = uiCtx({}, "rpc");
+    await command(name, "", ctx);
     assert.match(notes.join("\n"), /interactive/, name);
   }
 });
 
-test("reminds the user to pair when the bridge is configured but this session is not paired", async () => {
-  for (const [configured, matches, expected] of [[true, false, true], [true, true, false], [false, false, false]] as const) {
-    const { pi, emit } = fakePi();
-    const fake = fakeDeps({ approverMatches: matches });
-    if (configured) writeFileSync(join(fake.deps.agentDir, "pi-whatsapp.json"), JSON.stringify({ bridgePath: process.execPath }));
-    setup(pi as never, fake.deps);
-    const { ctx, notes } = commandCtx({});
-    await emit("session_start", { type: "session_start", reason: "startup" }, ctx);
-    assert.equal(notes.some((note) => /\/whatsapp-pair/.test(note)), expected, `configured ${configured}, paired ${matches}`);
-  }
-});
-
-test("the startup reminder never blocks on an unreachable bridge", async () => {
-  const { pi, emit } = fakePi();
-  const fake = fakeDeps();
-  fake.deps.connect = () => ({ status: () => new Promise(() => {}) }) as never; // hangs forever
-  writeFileSync(join(fake.deps.agentDir, "pi-whatsapp.json"), JSON.stringify({ bridgePath: process.execPath }));
-  setup(pi as never, fake.deps);
-  const started = Date.now();
-  await emit("session_start", { type: "session_start", reason: "startup" }, commandCtx({}).ctx);
-  assert.ok(Date.now() - started < 3000, "session start waited too long for the bridge");
+test("/whatsapp-status reports the bridge and this session's pairing", posix, async () => {
+  const bridge = statefulBridge({ running: true, linked: true, autostart: true });
+  const { pi, command, emit } = fakePi();
+  const d = deps();
+  writeFileSync(join(d.deps.agentDir, "pi-whatsapp.json"), JSON.stringify({ bridgePath: bridge.path }));
+  setup(pi as never, d.deps);
+  await emit("session_start", start);
+  const { ctx, notes } = uiCtx();
+  await command("whatsapp-status", "", ctx);
+  assert.match(notes.join("\n"), /online.*linked.*autostart on.*not paired/s);
 });
