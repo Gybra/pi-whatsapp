@@ -8,7 +8,7 @@ Read and search your WhatsApp conversations from [Pi](https://pi.dev), and send 
 
 | Platform | Status |
 |---|---|
-| macOS (Apple Silicon) | Automated tests pass. End-to-end verification with a real account is in progress. |
+| macOS (Apple Silicon) | **Tested** with a real account: QR linking, reading chats, approved text messages, downloading voice messages, autostart. |
 | Linux | Developed for it, automated tests run in CI. Not yet tested end to end. |
 | Windows | **Experimental.** Developed for it, not yet tested end to end. |
 
