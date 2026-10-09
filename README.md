@@ -2,9 +2,17 @@
 
 Read and search your WhatsApp conversations from [Pi](https://pi.dev), and send messages only after you approve each one inside Pi's terminal.
 
-> **Status: pre-release.** Not yet published to npm. It works with the [`whatsapp-mcp`](https://github.com/Gybra/whatsapp-mcp) bridge, which is also unreleased.
->
 > This is an unofficial WhatsApp integration, not affiliated with WhatsApp or Meta. Using unofficial clients can lead to account restrictions.
+
+## Platform support
+
+| Platform | Status |
+|---|---|
+| macOS (Apple Silicon) | Automated tests pass. End-to-end verification with a real account is in progress. |
+| Linux | Developed for it, automated tests run in CI. Not yet tested end to end. |
+| Windows | **Experimental.** Developed for it, not yet tested end to end. |
+
+It needs the [whatsapp-mcp](https://github.com/Gybra/whatsapp-mcp) bridge, which `/whatsapp-setup` can download for you.
 
 ## How it works
 

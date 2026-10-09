@@ -1,0 +1,39 @@
+name: Bug report
+description: Something does not work as described
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Do not paste** tokens, QR codes, phone numbers or message contents. Security problems go through private reporting.
+  - type: input
+    id: system
+    attributes:
+      label: OS, version and architecture
+      placeholder: macOS 26.5 arm64 / Arch Linux x86-64 / Windows 11 x64
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Pi (`pi --version`), pi-whatsapp, and `whatsapp-mcp version`
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected and what happened
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: From Pi and `whatsapp-mcp logs`. Remove anything personal.
+      render: text
