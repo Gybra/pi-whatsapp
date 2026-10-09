@@ -1,4 +1,29 @@
 {
-  "version": null,
-  "assets": {}
+  "version": "0.1.0",
+  "assets": {
+    "darwin-amd64": {
+      "file": "whatsapp-mcp-darwin-amd64",
+      "sha256": "6e7d1d06e29ffc630370d0a9b83f9201bc3b2d7f38b85e7735363a3fc3202bc2"
+    },
+    "darwin-arm64": {
+      "file": "whatsapp-mcp-darwin-arm64",
+      "sha256": "c3c65a38f1d6e046b3174a1dbb2f3af48062ba7e12567f1ee57e3c96153d3cff"
+    },
+    "linux-amd64": {
+      "file": "whatsapp-mcp-linux-amd64",
+      "sha256": "119aab926f1a2f86eef1cece2e7567921f35ba9fd7df56202d2e91d0dc4e7b85"
+    },
+    "linux-arm64": {
+      "file": "whatsapp-mcp-linux-arm64",
+      "sha256": "fe8f7b28de3eaf550983460f29ccc1165b20781174452a94ebc1b44edb99b732"
+    },
+    "windows-amd64": {
+      "file": "whatsapp-mcp-windows-amd64.exe",
+      "sha256": "f4997aeb48ff9fbc2c923b534aeb9436c6eb763d98b9b840bd284a06b87700cb"
+    },
+    "windows-arm64": {
+      "file": "whatsapp-mcp-windows-arm64.exe",
+      "sha256": "be7415471c059a4e418c16875e683e4105f166705cd73b6cb2652ed858b95745"
+    }
+  }
 }

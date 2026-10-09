@@ -1,7 +1,6 @@
 {
   "name": "pi-whatsapp",
   "version": "0.1.0",
-  "private": true,
   "description": "WhatsApp integration for Pi Coding Agent with in-terminal, per-message approval",
   "repository": {
     "type": "git",
