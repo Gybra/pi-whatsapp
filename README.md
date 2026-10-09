@@ -9,7 +9,7 @@ Read and search your WhatsApp conversations from [Pi](https://pi.dev), and send 
 | Platform | Status |
 |---|---|
 | macOS (Apple Silicon) | **Tested** with a real account: QR linking, reading chats, approved text messages, downloading voice messages, autostart. |
-| Linux | Developed for it, automated tests run in CI. Not yet tested end to end. |
+| Linux (x86-64) | **Tested** on Omarchy (Arch Linux) with a real account: setup from Pi, QR linking, reading chats, approved messages, voice messages, autostart across reboots. |
 | Windows | **Experimental.** Developed for it, not yet tested end to end. |
 
 It needs the [whatsapp-mcp](https://github.com/Gybra/whatsapp-mcp) bridge, which `/whatsapp-setup` can download for you.
