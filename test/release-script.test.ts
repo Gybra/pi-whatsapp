@@ -3,12 +3,13 @@ import { execFile } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { promisify } from "node:util";
 import { assetFor, type BridgeRelease } from "../src/install.ts";
 
 const run = promisify(execFile);
-const script = new URL("../scripts/update-bridge-release.mjs", import.meta.url).pathname;
+const script = fileURLToPath(new URL("../scripts/update-bridge-release.mjs", import.meta.url));
 const hash = (c: string) => c.repeat(64);
 
 test("writes the pinned checksums from a bridge release's SHA256SUMS", async () => {
