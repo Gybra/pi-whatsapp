@@ -1,6 +1,6 @@
 # Contributing
 
-Bug reports from Linux and Windows are especially welcome: those platforms are not yet tested end to end.
+Bug reports from Windows are especially welcome: it is not yet tested end to end.
 
 Report problems with the issue form, giving your OS, architecture, Pi version, `pi-whatsapp` version and `whatsapp-mcp version`. Remove anything personal from logs. Security problems go through private reporting; see [SECURITY.md](SECURITY.md).
 
