@@ -48,14 +48,14 @@ Everything happens inside Pi; no second terminal is needed.
 
 The approval key exists only in the running Pi process and is never written to disk. When Pi quits or reloads, the bridge stops trusting it, and the next session asks again. `/whatsapp-pair` asks right away instead of at the first message. `/whatsapp-status` shows the bridge state, whether WhatsApp is linked and whether this session can approve messages.
 
-To send a file, copy it into the bridge's `outbox` folder first and ask Pi to send it by name. The folder is under the bridge's data directory, shown by `whatsapp-mcp status`.
+To send a file, ask Pi to copy it into the bridge's `outbox` folder and send it; every file is reviewed before it is sent. Received files that Pi downloads, such as voice messages, are saved in the bridge's `downloads` folder, where Pi can open them for you. Both folders are in the bridge's data directory, shown by `whatsapp-mcp status`.
 
 ## Security notes
 
 - The bridge enforces approval. Disabling this extension never lets a message through; it only removes the way to approve one.
 - WhatsApp messages and contact names are untrusted input. They can contain instructions aimed at the model (prompt injection). The approval screen exists so that nothing is sent on the model's word alone. Read what you approve.
 - Messages that Pi reads become part of the conversation sent to your model provider and saved in Pi's session files.
-- The extension blocks the model's file and shell tools from the bridge's credentials, session data and pairing command. This stops the direct routes a manipulated model would try, but it is not a sandbox.
+- The extension blocks the model's file and shell tools from the bridge's credentials, session data and pairing command; only the `outbox` and `downloads` folders stay open to it. This stops the direct routes a manipulated model would try, but it is not a sandbox.
 - This design protects against the model and against other local programs using the bridge's API. It does not protect against a program running as your user that can change the bridge, its data or Pi itself.
 
 ## Development

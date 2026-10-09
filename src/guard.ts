@@ -18,16 +18,17 @@ export function protectedToolCall(event: { toolName: string; input: Record<strin
   const field = PATH_TOOLS.has(event.toolName) ? "path" : COMMAND_TOOLS.has(event.toolName) ? "command" : undefined;
   const value = field && event.input[field];
   if (typeof value !== "string") return undefined;
-  const dataRoots = [normalize(paths.dataDir), ...DATA_DIR_SUFFIXES];
+  const dataRoots = [normalize(paths.dataDir), ...DATA_DIR_SUFFIXES].filter(Boolean);
   let text = normalize(value);
-  // Files in the outbox are meant to be staged for sending; each one is still reviewed by the user.
+  // The outbox holds files staged for sending (each still reviewed by the user) and
+  // downloads holds received attachments the user may ask the model to work with.
   for (const root of dataRoots) {
-    text = text.replace(new RegExp(`${escapeRegExp(root)}/outbox(?:/[^\\s"'\`;|&]*)?`, "g"), (match) => (match.includes("..") ? match : ""));
+    text = text.replace(new RegExp(`${escapeRegExp(root)}/(?:outbox|downloads)(?:/[^\\s"'\`;|&]*)?`, "g"), (match) => (match.includes("..") ? match : ""));
   }
   // The install directory and config file also match by name, so ~ or $HOME spellings are caught.
-  const protectedRoots = [...dataRoots, normalize(paths.installDir), normalize(paths.configFile), "pi-whatsapp-bridge", "pi-whatsapp.json"];
+  const protectedRoots = [...dataRoots, normalize(paths.installDir), normalize(paths.configFile), "pi-whatsapp-bridge", "pi-whatsapp.json"].filter(Boolean);
   if (protectedRoots.some((root) => text.includes(root)) || (field === "command" && /(^|[\s/"'])pair-pi\b/.test(text))) {
-    return "Blocked: the WhatsApp bridge's credentials, session and pairing are off limits to the model. Only files in the bridge's outbox folder may be used. Ask the user to do this themselves.";
+    return "Blocked: the WhatsApp bridge's credentials, session and pairing are off limits to the model. Only the bridge's outbox and downloads folders may be used. Ask the user to do this themselves.";
   }
   return undefined;
 }

@@ -44,6 +44,18 @@ test("allows the outbox and ordinary work, including this repository", () => {
   }
 });
 
+test("lets the model read downloaded attachments, such as voice messages", () => {
+  assert.equal(call("read", { path: join(paths.dataDir, "downloads", "9f2c.ogg") }), undefined);
+  assert.equal(call("bash", { command: 'ffprobe "$HOME/Library/Application Support/whatsapp-mcp/downloads/9f2c.ogg"' }), undefined);
+  assert.ok(call("read", { path: join(paths.dataDir, "downloads", "..", "api-token") }));
+});
+
+test("an unknown data directory never blocks everything", () => {
+  const unknown = { ...paths, dataDir: "" };
+  assert.equal(protectedToolCall({ toolName: "bash", input: { command: "ls -la" } }, unknown), undefined);
+  assert.ok(protectedToolCall({ toolName: "bash", input: { command: "cat ~/.local/share/whatsapp-mcp/api-token" } }, unknown));
+});
+
 test("ignores other tools, including the WhatsApp MCP tools themselves", () => {
   assert.equal(call("mcp__whatsapp__list_messages", { query: "api-token" }), undefined);
   assert.equal(call("mcp__github__search", { q: "approver.json" }), undefined);
