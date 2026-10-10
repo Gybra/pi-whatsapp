@@ -151,7 +151,10 @@ export function setup(pi: ExtensionAPI, deps: Deps): void {
   async function chooseBridge(ctx: ExtensionContext, given: string): Promise<string | undefined> {
     if (given) {
       const problem = await checkBridgeExecutable(given);
-      if (problem) return void ctx.ui.notify(`Not a usable bridge: ${problem}.`, "error");
+      if (problem) {
+        ctx.ui.notify(`Not a usable bridge: ${problem}.`, "error");
+        return undefined;
+      }
       const ok = await ctx.ui.confirm("Use this WhatsApp bridge?", `${given}\n\nPi will run "${given} mcp" for its sessions. Pi's settings and mcp.json are not changed.`);
       return ok ? given : undefined;
     }
@@ -169,7 +172,10 @@ export function setup(pi: ExtensionAPI, deps: Deps): void {
     const path = (await ctx.ui.input("Absolute path to the whatsapp-mcp executable", "/usr/local/bin/whatsapp-mcp"))?.trim();
     if (!path) return undefined;
     const problem = await checkBridgeExecutable(path);
-    if (problem) return void ctx.ui.notify(`Not a usable bridge: ${problem}.`, "error");
+    if (problem) {
+      ctx.ui.notify(`Not a usable bridge: ${problem}.`, "error");
+      return undefined;
+    }
     return path;
   }
 
