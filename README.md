@@ -46,9 +46,25 @@ Everything happens inside Pi; no second terminal is needed.
 
 3. Ask Pi to read or send WhatsApp messages. Before the first message in a Pi session, Pi asks once whether this session may approve messages. After that, every message is still shown to you for approval.
 
-The approval key exists only in the running Pi process and is never written to disk. When Pi quits or reloads, the bridge stops trusting it, and the next session asks again. `/whatsapp-pair` asks right away instead of at the first message. `/whatsapp-status` shows the bridge state, whether WhatsApp is linked and whether this session can approve messages.
+The approval key exists only in the running Pi process and is never written to disk. When Pi quits or reloads, the bridge stops trusting it, and the next session asks again. `/whatsapp-pair` asks right away instead of at the first message. `/whatsapp-status` shows the bridge state, whether WhatsApp is linked and whether this session can approve messages. `/whatsapp-uninstall` undoes the setup; see [Uninstall](#uninstall).
 
 To send a file, ask Pi to copy it into the bridge's `outbox` folder and send it; every file is reviewed before it is sent. Received files that Pi downloads, such as voice messages, are saved in the bridge's `downloads` folder, where Pi can open them for you. Both folders are in the bridge's data directory, shown by `whatsapp-mcp status`.
+
+## Uninstall
+
+Run `/whatsapp-uninstall` in Pi. It shows what it will remove and asks before changing anything. Then it:
+
+- stops the bridge and removes its start-at-login service (launchd on macOS, systemd user service on Linux, Task Scheduler on Windows) with the bridge's own `whatsapp-mcp uninstall`;
+- asks whether to **keep** your local data (the default) or **purge** it. Purging deletes the WhatsApp session, message history, downloads and the bridge's credentials through `whatsapp-mcp uninstall --purge`, after a second confirmation in Pi and a third in the terminal, where you type `yes`;
+- deletes Pi's WhatsApp settings and the bridge Pi downloaded, and removes the WhatsApp tools from the running Pi session.
+
+A bridge you set up yourself with `/whatsapp-setup /path/to/whatsapp-mcp` and your `mcp.json` files are never deleted or changed. If the bridge cannot be found or fails, Pi says what is left to do; running `/whatsapp-uninstall` again is safe.
+
+What remains afterwards:
+
+- with *Keep local data*, the bridge's data directory, which Pi names at the end. Delete it later to remove your WhatsApp history from this computer;
+- the link on your phone. Remove this computer under *Settings › Linked devices* in WhatsApp: deleting local data does not unlink it;
+- the extension itself. Remove it from a terminal with `pi uninstall npm:pi-whatsapp` (use the source that `pi list` shows if you installed it another way).
 
 ## Security notes
 
