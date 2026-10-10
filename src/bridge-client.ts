@@ -7,10 +7,13 @@ const JSON_LIMIT = 4 * 1024 * 1024;
 const PREVIEW_LIMIT = 16 * 1024 * 1024;
 const TIMEOUT_MS = 180_000;
 const DRAFT_ID = /^[0-9a-f]{32}$/;
-const STATES = ["unpaired", "connecting", "online", "offline", "action_required", "stopped"] as const;
+/** The bridge's connection states, as reported by its API and by `whatsapp-mcp status`. */
+export const BRIDGE_STATES = ["stopped", "unpaired", "connecting", "online", "offline", "action_required"] as const;
+
+export type BridgeState = (typeof BRIDGE_STATES)[number];
 
 export type RuntimeStatus = {
-  state: (typeof STATES)[number];
+  state: BridgeState;
   connected: boolean;
   approver_id: string;
 };
@@ -114,7 +117,7 @@ function parseStatus(value: unknown): RuntimeStatus {
   const valid =
     typeof value === "object" && value !== null && !Array.isArray(value) &&
     Object.keys(s).sort().join() === "approver_id,connected,state" &&
-    STATES.includes(s.state as RuntimeStatus["state"]) &&
+    BRIDGE_STATES.includes(s.state as BridgeState) &&
     typeof s.connected === "boolean" &&
     typeof s.approver_id === "string" && /^([0-9a-f]{64})?$/.test(s.approver_id);
   if (!valid) throw new BridgeError("bad_response");
