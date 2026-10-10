@@ -1,14 +1,13 @@
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
+import { BRIDGE_STATES, type BridgeState } from "./bridge-client.ts";
 
 // Runs the installed whatsapp-mcp executable directly, never through a shell.
-
-const STATES = ["stopped", "unpaired", "connecting", "online", "offline", "action_required"] as const;
 
 export type BridgeStatus = {
   version: string;
   running: boolean;
-  state: (typeof STATES)[number];
+  state: BridgeState;
   connected: boolean;
   linked: boolean;
   approver_id: string;
@@ -19,11 +18,14 @@ export type BridgeStatus = {
 
 export type LinkEvent = { event: "qr"; modules: string[]; expires_in: number } | { event: "notice" | "linked"; message: string } | { event: "confirm_code"; code: string; message: string };
 
+/** How a bridge command ended; `error` is the bridge's own message. */
+export type BridgeOutcome = { ok: true } | { ok: false; error: string };
+
 export type LinkProcess = {
   /** Answers a confirm_code event. */
   answer(confirmed: boolean): void;
   cancel(): void;
-  done: Promise<{ ok: true } | { ok: false; error: string }>;
+  done: Promise<BridgeOutcome>;
 };
 
 export class BridgeCommandError extends Error {}
@@ -49,7 +51,7 @@ export function runBridgeCommand(bridgePath: string, args: string[], options: { 
  * Runs the bridge on the terminal itself, for commands that confirm only on a real
  * terminal, such as `uninstall --purge`. Blocks until it exits; stderr is kept for the error.
  */
-export function runBridgeInTerminal(bridgePath: string, args: string[]): { ok: true } | { ok: false; error: string } {
+export function runBridgeInTerminal(bridgePath: string, args: string[]): BridgeOutcome {
   const result = spawnSync(bridgePath, args, { stdio: ["inherit", "inherit", "pipe"] });
   if (result.error) return { ok: false, error: result.error.message };
   return result.status === 0 ? { ok: true } : { ok: false, error: bridgeMessage(result.stderr.toString()) };
@@ -64,7 +66,7 @@ function parseStatus(text: string): BridgeStatus {
   }
   const valid =
     typeof s === "object" && s !== null &&
-    typeof s.version === "string" && typeof s.running === "boolean" && STATES.includes(s.state as BridgeStatus["state"]) &&
+    typeof s.version === "string" && typeof s.running === "boolean" && BRIDGE_STATES.includes(s.state as BridgeState) &&
     typeof s.connected === "boolean" && typeof s.linked === "boolean" && typeof s.autostart === "boolean" &&
     typeof s.approver_id === "string" && /^([0-9a-f]{64})?$/.test(s.approver_id) &&
     typeof s.data_dir === "string" && typeof s.log_file === "string";
@@ -115,7 +117,7 @@ export function startLink(bridgePath: string, onEvent: (event: LinkEvent) => voi
     const event = parseLinkEvent(line);
     if (event) onEvent(event);
   });
-  const done = new Promise<{ ok: true } | { ok: false; error: string }>((resolve) => {
+  const done = new Promise<BridgeOutcome>((resolve) => {
     child.on("error", (error) => resolve({ ok: false, error: error.message }));
     child.on("close", (code) => resolve(code === 0 ? { ok: true } : { ok: false, error: bridgeMessage(stderr) }));
   });
