@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import test from "node:test";
-import { createProof, createSessionSigner, destroySessionSigner } from "../src/approval.ts";
+import { createProof, createSessionSigner } from "../src/approval.ts";
 import { decodeDraft } from "../src/protocol.ts";
 import { fixture, fixtureWire, keyFromSeed, RFC_TEST_SEED, textPayload, wireFor } from "./helpers.ts";
 
@@ -43,7 +43,7 @@ test("refuses to sign an expired draft", () => {
 test("a destroyed signer can no longer sign", () => {
   const signer = createSessionSigner(keyFromSeed(RFC_TEST_SEED));
   const draft = decodeDraft(fixtureWire(), signer, fixture.now);
-  destroySessionSigner(signer);
+  signer.dispose();
   assert.throws(() => createProof(draft, signer, fixture.now), /disposed/);
   assert.throws(() => signer.sign(draft.challengeBytes), /disposed/);
 });

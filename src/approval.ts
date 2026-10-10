@@ -24,10 +24,6 @@ export function createSessionSigner(privateKey: KeyObject = generateKeyPairSync(
   };
 }
 
-export function destroySessionSigner(signer: SessionSigner): void {
-  signer.dispose();
-}
-
 /** Signs a reviewed draft. Only call after the user approved this exact draft. */
 export function createProof(draft: ReviewedDraft, signer: SessionSigner, nowSeconds: number): ApprovalProof {
   if (nowSeconds >= draft.payload.expires_at) throw new Error("draft expired");
