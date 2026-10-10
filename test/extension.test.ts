@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -14,7 +14,8 @@ import { textPayload, wireFor } from "./helpers.ts";
 
 const posix = { skip: process.platform === "win32" };
 type Handler = (event: unknown, ctx: unknown) => unknown;
-type State = { running: boolean; linked: boolean; autostart: boolean; approver: string };
+// dataDir and purgeAnswer drive "uninstall --purge": purgeAnswer is what the user types at the bridge's own prompt.
+type State = { running: boolean; linked: boolean; autostart: boolean; approver: string; dataDir?: string; purgeAnswer?: string; failUninstall?: boolean };
 
 /** A whatsapp-mcp stand-in that keeps its state in a file and logs every command. */
 function statefulBridge(initial: Partial<State> = {}) {
@@ -41,6 +42,11 @@ function statefulBridge(initial: Partial<State> = {}) {
         st.linked = true; save();
         say({ event: "linked", message: "This computer is now linked to WhatsApp." });
         process.exit(0);
+      case "uninstall":
+        if (st.failUninstall) { console.error("Error: the bridge did not stop; see whatsapp-mcp logs"); process.exit(1); }
+        st.running = false; st.autostart = false; save();
+        if (args[1] === "--purge" && st.purgeAnswer === "yes") fs.rmSync(st.dataDir, { recursive: true, force: true });
+        process.exit(0);
       case "pair-pi":
         process.stdin.on("end", () => {
           st.approver = require("crypto").createHash("sha256").update(Buffer.from(input.trim(), "base64")).digest("hex");
@@ -61,9 +67,13 @@ function fakePi() {
   const handlers = new Map<string, Handler>();
   const commands = new Map<string, (args: string, ctx: unknown) => Promise<void>>();
   const registered: unknown[] = [];
+  const unregistered: string[] = [];
   const pi = {
     registerMcpServer(name: string, config: unknown) {
       registered.push({ name, config });
+    },
+    unregisterMcpServer(name: string) {
+      unregistered.push(name);
     },
     on(name: string, handler: Handler) {
       handlers.set(name, handler);
@@ -79,6 +89,7 @@ function fakePi() {
   return {
     pi,
     registered,
+    unregistered,
     command: (name: string, args: string, ctx: unknown) => commands.get(name)!(args, ctx),
     emit: (name: string, event: unknown, ctx: unknown = uiCtx().ctx) => handlers.get(name)?.(event, ctx),
   };
@@ -104,7 +115,7 @@ function uiCtx(answers: { input?: string; confirm?: boolean[]; select?: string[]
       notify: (message: string) => notes.push(message),
       // The QR screen: run the real component until the link process finishes.
       custom: (factory: (...a: unknown[]) => unknown) =>
-        new Promise((resolve) => factory({ terminal: { rows: 60 }, requestRender() {} }, { fg: (_c: string, t: string) => t, bold: (t: string) => t }, {}, resolve)),
+        new Promise((resolve) => factory({ terminal: { rows: 60 }, requestRender() {}, stop() {}, start() {} }, { fg: (_c: string, t: string) => t, bold: (t: string) => t }, {}, resolve)),
     },
   };
   return { ctx, notes, asked };
@@ -324,7 +335,7 @@ test("commands refuse outside the interactive TUI", async () => {
   const { pi, command, emit } = fakePi();
   setup(pi as never, deps().deps);
   await emit("session_start", start);
-  for (const name of ["whatsapp-pair", "whatsapp-setup"]) {
+  for (const name of ["whatsapp-pair", "whatsapp-setup", "whatsapp-uninstall"]) {
     const { ctx, notes } = uiCtx({}, "rpc");
     await command(name, "", ctx);
     assert.match(notes.join("\n"), /interactive/, name);
@@ -341,4 +352,116 @@ test("/whatsapp-status reports the bridge and this session's pairing", posix, as
   const { ctx, notes } = uiCtx();
   await command("whatsapp-status", "", ctx);
   assert.match(notes.join("\n"), /online.*linked.*autostart on.*not paired/s);
+});
+
+/** A Pi set up with the given bridge: config and some local data written, session started. */
+async function setUpWith(bridgePath: string, d = deps()) {
+  const fake = fakePi();
+  writeFileSync(join(d.deps.agentDir, "pi-whatsapp.json"), JSON.stringify({ bridgePath }));
+  mkdirSync(d.deps.dataDir());
+  writeFileSync(join(d.deps.dataDir(), "whatsapp.db"), "session");
+  setup(fake.pi as never, d.deps);
+  await fake.emit("session_start", start);
+  return { ...fake, d, configFile: join(d.deps.agentDir, "pi-whatsapp.json"), installDir: join(d.deps.agentDir, "pi-whatsapp-bridge") };
+}
+
+/** Copies a stand-in bridge to where /whatsapp-setup downloads it. */
+function downloadedBridge(agentDir: string, path: string): string {
+  const dir = join(agentDir, "pi-whatsapp-bridge", "0.1.0");
+  mkdirSync(dir, { recursive: true });
+  copyFileSync(path, join(dir, "whatsapp-mcp"));
+  chmodSync(join(dir, "whatsapp-mcp"), 0o755);
+  return join(dir, "whatsapp-mcp");
+}
+
+const bridgeCalls = (bridge: { commands(): string[] }) => bridge.commands().filter((c) => !c.startsWith("status"));
+
+test("/whatsapp-uninstall keeps data by default, removes the download and the tools, and is safe to rerun", posix, async () => {
+  const d = deps();
+  const bridge = statefulBridge({ running: true, linked: true, autostart: true, dataDir: d.deps.dataDir() });
+  const pi = await setUpWith(downloadedBridge(d.deps.agentDir, bridge.path), d);
+  const { ctx, notes, asked } = uiCtx({ confirm: [true], select: ["Keep local data"] });
+  await pi.command("whatsapp-uninstall", "", ctx);
+  assert.deepEqual(bridgeCalls(bridge), ["uninstall"]);
+  assert.equal(bridge.state().running || bridge.state().autostart, false);
+  assert.ok(asked.some((q) => /WhatsApp data/.test(q)), "keep or purge asked");
+  assert.equal(existsSync(pi.configFile), false);
+  assert.equal(existsSync(pi.installDir), false, "the downloaded bridge is removed");
+  assert.equal(existsSync(join(d.deps.dataDir(), "whatsapp.db")), true, "local data is kept");
+  assert.deepEqual(pi.unregistered, ["whatsapp"]);
+  assert.match(((await pi.emit("tool_call", outgoing())) as { reason: string }).reason, /Nothing was sent/);
+  const report = notes.join("\n");
+  assert.match(report, /remain in .*bridge-data/);
+  assert.match(report, /Linked devices/);
+  assert.match(report, /pi uninstall npm:pi-whatsapp/);
+
+  const again = uiCtx();
+  await pi.command("whatsapp-uninstall", "", again.ctx);
+  assert.match(again.notes.join("\n"), /nothing to remove/);
+  assert.deepEqual(bridgeCalls(bridge), ["uninstall"], "a rerun runs nothing");
+});
+
+test("/whatsapp-uninstall changes nothing when cancelled at any step", posix, async () => {
+  for (const answers of [{ confirm: [false] }, { confirm: [true], select: [] }, { confirm: [true], select: ["Purge", "Cancel"] }]) {
+    const d = deps();
+    const bridge = statefulBridge({ running: true, linked: true, autostart: true, dataDir: d.deps.dataDir() });
+    const pi = await setUpWith(downloadedBridge(d.deps.agentDir, bridge.path), d);
+    const { ctx, notes } = uiCtx(answers);
+    await pi.command("whatsapp-uninstall", "", ctx);
+    assert.deepEqual(bridgeCalls(bridge), [], JSON.stringify(answers));
+    assert.equal(existsSync(pi.configFile) && existsSync(pi.installDir), true);
+    assert.deepEqual(pi.unregistered, []);
+    assert.match(notes.join("\n"), /cancelled. Nothing was changed/);
+  }
+});
+
+test("/whatsapp-uninstall purges through the bridge and never deletes a user's bridge or mcp.json", posix, async () => {
+  for (const purgeAnswer of ["yes", "no"]) {
+    const d = deps();
+    const bridge = statefulBridge({ running: true, linked: true, dataDir: d.deps.dataDir(), purgeAnswer });
+    const mcpFile = join(d.deps.agentDir, "mcp.json");
+    const mcpContent = JSON.stringify({ mcpServers: { whatsapp: { command: bridge.path, args: ["mcp"] } } });
+    writeFileSync(mcpFile, mcpContent);
+    const pi = await setUpWith(bridge.path, d);
+    const { ctx, notes, asked } = uiCtx({ confirm: [true], select: ["Purge", "Delete"] });
+    await pi.command("whatsapp-uninstall", "", ctx);
+    assert.ok(asked.some((q) => q.startsWith(`Permanently delete ${d.deps.dataDir()}?`)), "purge confirmed separately");
+    assert.deepEqual(bridgeCalls(bridge), ["uninstall --purge"]);
+    assert.equal(existsSync(d.deps.dataDir()), purgeAnswer !== "yes", purgeAnswer);
+    assert.equal(existsSync(bridge.path), true, "an external bridge is never deleted");
+    assert.equal(existsSync(pi.configFile), false);
+    assert.equal(readFileSync(mcpFile, "utf8"), mcpContent);
+    const report = notes.join("\n");
+    assert.match(report, purgeAnswer === "yes" ? /data was deleted/ : /remain in/);
+    assert.match(report, /mcp.json still defines a "whatsapp" server/);
+  }
+});
+
+test("/whatsapp-uninstall without a usable bridge removes Pi's files and says what is left", posix, async () => {
+  const pi = await setUpWith("/nonexistent/whatsapp-mcp");
+  const { ctx, notes, asked } = uiCtx({ confirm: [true] });
+  await pi.command("whatsapp-uninstall", "", ctx);
+  assert.ok(!asked.some((q) => /WhatsApp data/.test(q)), "no purge without a bridge to run it");
+  assert.equal(existsSync(pi.configFile), false);
+  assert.equal(existsSync(join(pi.d.deps.dataDir(), "whatsapp.db")), true);
+  assert.match(notes.join("\n"), /could not be stopped from Pi.*not found.*whatsapp-mcp uninstall/s);
+
+  // An interrupted setup: the bridge was downloaded but never configured.
+  const d = deps();
+  downloadedBridge(d.deps.agentDir, statefulBridge().path);
+  const { pi: interrupted, command } = fakePi();
+  setup(interrupted as never, d.deps);
+  await command("whatsapp-uninstall", "", uiCtx({ confirm: [true] }).ctx);
+  assert.equal(existsSync(join(d.deps.agentDir, "pi-whatsapp-bridge")), false);
+});
+
+test("/whatsapp-uninstall keeps everything when the bridge fails, so it can be run again", posix, async () => {
+  const d = deps();
+  const bridge = statefulBridge({ running: true, linked: true, autostart: true, failUninstall: true });
+  const pi = await setUpWith(downloadedBridge(d.deps.agentDir, bridge.path), d);
+  const { ctx, notes } = uiCtx({ confirm: [true], select: ["Keep"] });
+  await pi.command("whatsapp-uninstall", "", ctx);
+  assert.equal(existsSync(pi.configFile) && existsSync(pi.installDir), true);
+  assert.deepEqual(pi.unregistered, []);
+  assert.match(notes.join("\n"), /could not be uninstalled: the bridge did not stop.*Nothing else was changed/s);
 });

@@ -10,6 +10,7 @@ import { assetFor, installBridge, type BridgeRelease } from "../src/install.ts";
 import { runLinkScreen } from "../src/link-view.ts";
 import type { SessionSigner } from "../src/protocol.ts";
 import { reviewDraft } from "../src/review.ts";
+import { uninstallWhatsApp } from "../src/uninstall.ts";
 
 export type Deps = {
   agentDir: string;
@@ -95,6 +96,15 @@ export function setup(pi: ExtensionAPI, deps: Deps): void {
     }
     pi.registerMcpServer("whatsapp", { command: path, args: ["mcp"], timeout: 180, exposure: "codemode" });
     registeredBridge = path;
+  }
+
+  /** Drops the bridge from this Pi process: its MCP tools, connection and pending approvals. */
+  async function forgetBridge(): Promise<void> {
+    await controller?.cancelAll();
+    controller = undefined;
+    client = undefined;
+    if (registeredBridge) pi.unregisterMcpServer("whatsapp");
+    registeredBridge = undefined;
   }
 
   pi.on("session_start", async (_event, ctx) => {
@@ -209,6 +219,18 @@ export function setup(pi: ExtensionAPI, deps: Deps): void {
         ctx.ui.notify(paired ? "This Pi session can now approve WhatsApp messages." : "Not paired.", paired ? "info" : "warning");
       } catch (error) {
         ctx.ui.notify(`Pairing failed: ${(error as Error).message}`, "error");
+      }
+    },
+  });
+
+  pi.registerCommand("whatsapp-uninstall", {
+    description: "Stop the WhatsApp bridge, remove its autostart and Pi's WhatsApp setup",
+    handler: async (_args, ctx) => {
+      if (!interactive(ctx)) return ctx.ui.notify("WhatsApp uninstall needs Pi's interactive terminal.", "error");
+      try {
+        await uninstallWhatsApp(ctx, { agentDir: deps.agentDir, installDir, dataDir: deps.dataDir() }, forgetBridge);
+      } catch (error) {
+        ctx.ui.notify(`WhatsApp uninstall failed: ${(error as Error).message}. Run /whatsapp-uninstall again.`, "error");
       }
     },
   });
