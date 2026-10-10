@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext, type ToolCallEventResult } from "@earendil-works/pi-coding-agent";
-import { createApprovalController, createSessionSigner, destroySessionSigner, isOutgoingWhatsAppCall, type ApprovalController } from "../src/approval.ts";
+import { createApprovalController, createSessionSigner, isOutgoingWhatsAppCall, type ApprovalController } from "../src/approval.ts";
 import { bridgeStatus, pairPi, runBridgeCommand, startLink } from "../src/bridge-cli.ts";
 import { createBridgeClient, type BridgeClient } from "../src/bridge-client.ts";
 import { bridgeDataDir, checkBridgeExecutable, configPath, findConfiguredServer, isSameBridge, loadBridgeToken, loadConfig, saveConfig } from "../src/config.ts";
@@ -143,7 +143,7 @@ export function setup(pi: ExtensionAPI, deps: Deps): void {
     } catch {
       // The bridge may be down; its stale public key is useless without this process's private key.
     } finally {
-      destroySessionSigner(current);
+      current.dispose();
     }
   });
 
