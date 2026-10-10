@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 
 // Runs the installed whatsapp-mcp executable directly, never through a shell.
@@ -43,6 +43,16 @@ export function runBridgeCommand(bridgePath: string, args: string[], options: { 
     });
     child.stdin?.end(options.input ?? "");
   });
+}
+
+/**
+ * Runs the bridge on the terminal itself, for commands that confirm only on a real
+ * terminal, such as `uninstall --purge`. Blocks until it exits; stderr is kept for the error.
+ */
+export function runBridgeInTerminal(bridgePath: string, args: string[]): { ok: true } | { ok: false; error: string } {
+  const result = spawnSync(bridgePath, args, { stdio: ["inherit", "inherit", "pipe"] });
+  if (result.error) return { ok: false, error: result.error.message };
+  return result.status === 0 ? { ok: true } : { ok: false, error: bridgeMessage(result.stderr.toString()) };
 }
 
 function parseStatus(text: string): BridgeStatus {

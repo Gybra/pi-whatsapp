@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
-import { bridgeStatus, BridgeCommandError, pairPi, runBridgeCommand, startLink, type LinkEvent } from "../src/bridge-cli.ts";
+import { bridgeStatus, BridgeCommandError, pairPi, runBridgeCommand, runBridgeInTerminal, startLink, type LinkEvent } from "../src/bridge-cli.ts";
 import { fakeBridge, STATUS } from "./fake-bridge.ts";
 
 const posix = { skip: process.platform === "win32" };
@@ -19,6 +19,13 @@ test("reports the bridge's error message, without stack noise", posix, async () 
 test("times out a hanging command", posix, async () => {
   const bridge = fakeBridge(`await new Promise(() => setInterval(() => {}, 1000))`);
   await assert.rejects(runBridgeCommand(bridge, ["status"], { timeoutMs: 200 }), /did not respond/);
+});
+
+test("runs a command on the terminal and reports its error", posix, () => {
+  assert.deepEqual(runBridgeInTerminal(fakeBridge(`process.exit(args.join(" ") === "uninstall --purge" ? 0 : 3)`), ["uninstall", "--purge"]), { ok: true });
+  const failing = fakeBridge(`console.error("Error: --purge needs an interactive terminal to confirm"); process.exit(1)`);
+  assert.deepEqual(runBridgeInTerminal(failing, ["uninstall", "--purge"]), { ok: false, error: "--purge needs an interactive terminal to confirm" });
+  assert.equal(runBridgeInTerminal("/nonexistent/whatsapp-mcp", []).ok, false);
 });
 
 test("parses and validates status", posix, async () => {
