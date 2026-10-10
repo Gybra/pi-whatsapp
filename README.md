@@ -35,7 +35,7 @@ Everything happens inside Pi; no second terminal is needed.
 1. Install the extension:
 
    ```sh
-   pi install npm:pi-whatsapp   # once published
+   pi install npm:pi-whatsapp
    ```
 
 2. In Pi, run `/whatsapp-setup`. It:
