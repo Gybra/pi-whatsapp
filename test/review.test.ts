@@ -26,22 +26,24 @@ function fileDraft(name: string, mime: string, content: Uint8Array, message = ""
 function startReview(draft: ReviewedDraft, options: { mode?: string; preview?: Uint8Array; rows?: number; signal?: AbortSignal } = {}) {
   let view: (DraftReview & { dispose?(): void }) | undefined;
   let customCalls = 0;
+  let customOptions: unknown;
   let markOpened: (view: DraftReview) => void = () => {};
   const opened = new Promise<DraftReview>((resolve) => (markOpened = resolve));
   const ctx = {
     mode: options.mode ?? "tui",
     hasUI: options.mode !== "print" && options.mode !== "json",
     ui: {
-      custom: (factory: (...args: unknown[]) => unknown) =>
+      custom: (factory: (...args: unknown[]) => unknown, customOpts?: unknown) =>
         new Promise((resolve) => {
           customCalls++;
+          customOptions = customOpts;
           view = factory({ terminal: { rows: options.rows ?? 24 }, requestRender() {} }, plainTheme, {}, resolve) as typeof view;
           markOpened(view!);
         }),
     },
   };
   const result = reviewDraft(ctx as never, draft, options.signal ?? new AbortController().signal, options.preview);
-  return { result, view: () => view!, opened, customCalls: () => customCalls };
+  return { result, view: () => view!, opened, customCalls: () => customCalls, customOptions: () => customOptions };
 }
 
 function renderAll(view: DraftReview, width: number): string[] {
@@ -100,6 +102,29 @@ test("approval stays disabled until the end of the content was shown", async () 
   const screen = review.view().render(60);
   assert.ok(screen.some((line) => line.includes("[Cancel]")) && screen.some((line) => line.includes("to enable Approve")), "focus stays on Cancel");
   review.view().handleInput(KEYS.end);
+  assert.ok(review.view().render(60).some((line) => line.includes("line 199")));
+  review.view().handleInput(KEYS.tab);
+  review.view().handleInput(KEYS.enter);
+  assert.equal(await review.result, true);
+});
+
+test("opens as a full-terminal overlay so the editor dock cannot clip the buttons", () => {
+  const review = startReview(draftWith({ message: "hi" }));
+  assert.deepEqual(review.customOptions(), {
+    overlay: true,
+    overlayOptions: { width: "100%", maxHeight: "100%", anchor: "bottom-left" },
+  });
+});
+
+test("the mouse wheel scrolls the content and can reach the end", async () => {
+  const long = Array.from({ length: 200 }, (_, i) => `line ${i}`).join("\n");
+  const review = startReview(draftWith({ message: long }), { rows: 12 });
+  review.view().render(60);
+  const wheel = (wheelDelta: number) => review.view().handleMouse!({ type: "wheel", wheelDelta } as never);
+  assert.deepEqual(wheel(3), { handled: true });
+  assert.ok(review.view().render(60).some((line) => line.includes("line 3")));
+  assert.equal(review.view().handleMouse!({ type: "press" } as never), undefined, "clicks are left to Pi");
+  wheel(1000);
   assert.ok(review.view().render(60).some((line) => line.includes("line 199")));
   review.view().handleInput(KEYS.tab);
   review.view().handleInput(KEYS.enter);
