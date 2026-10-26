@@ -1,5 +1,5 @@
 import { Agent, request } from "node:http";
-import type { BridgeClient, BridgeState, RuntimeStatus } from "./types.ts";
+import type { BridgeClient, BridgeState, RuntimeStatus } from "./types/bridge.ts";
 
 // The bridge listens on this fixed loopback address and rejects any other Host header.
 const API_HOST = "127.0.0.1:8080";

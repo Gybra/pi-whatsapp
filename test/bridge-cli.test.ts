@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { bridgeStatus, BridgeCommandError, pairPi, runBridgeCommand, runBridgeInTerminal, startLink } from "../src/bridge-cli.ts";
-import type { LinkEvent } from "../src/types.ts";
+import type { LinkEvent } from "../src/types/bridge.ts";
 import { fakeBridge, STATUS } from "./fake-bridge.ts";
 
 const posix = { skip: process.platform === "win32" };

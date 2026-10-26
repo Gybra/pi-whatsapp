@@ -7,7 +7,9 @@ import test from "node:test";
 import { setup } from "../extensions/index.ts";
 import { createSessionSigner } from "../src/approval.ts";
 import { BridgeError } from "../src/bridge-client.ts";
-import type { BridgeClient, BridgeRelease, Deps, SessionSigner } from "../src/types.ts";
+import type { SessionSigner } from "../src/types/approval.ts";
+import type { BridgeClient, BridgeRelease } from "../src/types/bridge.ts";
+import type { Deps } from "../src/types/extension.ts";
 import { fakeBridge } from "./fake-bridge.ts";
 import { textPayload, wireFor } from "./helpers.ts";
 

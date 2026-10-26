@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { access, lstat, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
-import type { ConfiguredServer } from "./types.ts";
+import type { ConfiguredServer } from "./types/extension.ts";
 
 const APP_NAME = "whatsapp-mcp";
 

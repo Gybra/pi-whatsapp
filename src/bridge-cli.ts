@@ -1,7 +1,7 @@
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { BRIDGE_STATES } from "./bridge-client.ts";
-import type { BridgeOutcome, BridgeState, BridgeStatus, LinkEvent, LinkProcess } from "./types.ts";
+import type { BridgeOutcome, BridgeState, BridgeStatus, LinkEvent, LinkProcess } from "./types/bridge.ts";
 
 // Runs the installed whatsapp-mcp executable directly, never through a shell.
 

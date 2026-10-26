@@ -9,7 +9,9 @@ import { protectedToolCall } from "../src/guard.ts";
 import { assetFor, installBridge } from "../src/install.ts";
 import { runLinkScreen } from "../src/link-view.ts";
 import { reviewDraft } from "../src/review.ts";
-import type { ApprovalController, BridgeClient, BridgeRelease, Deps, SessionSigner } from "../src/types.ts";
+import type { ApprovalController, SessionSigner } from "../src/types/approval.ts";
+import type { BridgeClient, BridgeRelease } from "../src/types/bridge.ts";
+import type { Deps } from "../src/types/extension.ts";
 import { uninstallWhatsApp } from "../src/uninstall.ts";
 
 const defaultDeps = (): Deps => ({

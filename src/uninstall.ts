@@ -4,7 +4,8 @@ import { isAbsolute, relative } from "node:path";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { runBridgeCommand, runBridgeInTerminal } from "./bridge-cli.ts";
 import { checkBridgeExecutable, configPath, findConfiguredServer, loadConfig } from "./config.ts";
-import type { BridgeOutcome, ConfiguredServer } from "./types.ts";
+import type { BridgeOutcome } from "./types/bridge.ts";
+import type { ConfiguredServer } from "./types/extension.ts";
 
 // Undoes /whatsapp-setup. The bridge's own `uninstall` stops it and removes its login
 // service; this removes only what the extension created, never mcp.json or a bridge the

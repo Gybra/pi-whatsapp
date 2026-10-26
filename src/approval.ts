@@ -2,7 +2,8 @@ import { createHash, createPublicKey, generateKeyPairSync, sign as ed25519Sign, 
 import type { ExtensionContext, ToolCallEventResult } from "@earendil-works/pi-coding-agent";
 import { BridgeError } from "./bridge-client.ts";
 import { decodeDraft } from "./protocol.ts";
-import type { ApprovalController, ApprovalProof, BridgeClient, ReviewedDraft, SendInput, SessionSigner } from "./types.ts";
+import type { ApprovalController, ApprovalProof, ReviewedDraft, SendInput, SessionSigner } from "./types/approval.ts";
+import type { BridgeClient } from "./types/bridge.ts";
 
 /**
  * Holds this Pi session's approval key. The private key lives only in this closure:
