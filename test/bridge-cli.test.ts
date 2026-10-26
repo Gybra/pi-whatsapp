@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { bridgeStatus, BridgeCommandError, pairPi, runBridgeCommand, runBridgeInTerminal, startLink, type LinkEvent } from "../src/bridge-cli.ts";
 import { fakeBridge, STATUS } from "./fake-bridge.ts";
@@ -14,6 +16,12 @@ test("runs the bridge without a shell and returns stdout", posix, async () => {
 test("reports the bridge's error message, without stack noise", posix, async () => {
   const bridge = fakeBridge(`console.error("Error: the bridge is running; stop it first"); process.exit(1)`);
   await assert.rejects(runBridgeCommand(bridge, ["link"]), (e: unknown) => e instanceof BridgeCommandError && e.message === "the bridge is running; stop it first");
+});
+
+test("reports a bridge that exits before reading its input, without crashing", posix, async () => {
+  const bridge = fakeBridge(`console.error("Error: the bridge did not stop"); process.exit(1)`);
+  // Larger than a pipe buffer, so the write is still pending when the bridge exits.
+  await assert.rejects(runBridgeCommand(bridge, ["uninstall"], { input: "x".repeat(4 * 1024 * 1024) }), /the bridge did not stop/);
 });
 
 test("times out a hanging command", posix, async () => {
@@ -66,6 +74,19 @@ test("streams link events and answers confirmation codes", posix, async () => {
 
   const refused = startLink(bridge, (event) => event.event === "confirm_code" && refused.answer(false));
   assert.deepEqual(await refused.done, { ok: false, error: "cancelled" });
+});
+
+test("answering a bridge that stopped reading reports its failure, without crashing", posix, async () => {
+  // Written by hand: fakeBridge reads stdin, so it cannot close its input.
+  const bridge = join(mkdtempSync(join(tmpdir(), "pi-whatsapp-closed-input-")), "whatsapp-mcp");
+  writeFileSync(bridge, `#!${process.execPath}
+require("fs").closeSync(0);
+console.log(JSON.stringify({ event: "confirm_code", code: "ABCD-1234", message: "Confirm" }));
+setTimeout(() => { console.error("Error: linking failed"); process.exit(1); }, 200);
+`);
+  chmodSync(bridge, 0o755);
+  const link = startLink(bridge, (event) => event.event === "confirm_code" && link.answer(true));
+  assert.deepEqual(await link.done, { ok: false, error: "linking failed" });
 });
 
 test("cancelling a link stops the bridge process", posix, async () => {

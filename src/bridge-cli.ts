@@ -43,6 +43,8 @@ export function runBridgeCommand(bridgePath: string, args: string[], options: { 
       if (error.killed || error.signal) return reject(new BridgeCommandError(`whatsapp-mcp ${args[0]} did not respond`));
       reject(new BridgeCommandError(bridgeMessage(stderr)));
     });
+    // The bridge may exit before reading its input; its exit status reports the failure.
+    child.stdin?.on("error", () => {});
     child.stdin?.end(options.input ?? "");
   });
 }
@@ -121,6 +123,7 @@ export function startLink(bridgePath: string, onEvent: (event: LinkEvent) => voi
     child.on("error", (error) => resolve({ ok: false, error: error.message }));
     child.on("close", (code) => resolve(code === 0 ? { ok: true } : { ok: false, error: bridgeMessage(stderr) }));
   });
+  child.stdin.on("error", () => {}); // the process may exit before reading an answer
   return {
     answer: (confirmed) => child.stdin.write(confirmed ? "yes\n" : "no\n"),
     cancel: () => child.kill(),
