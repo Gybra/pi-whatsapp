@@ -4,7 +4,8 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { assetFor, installBridge, type BridgeRelease } from "../src/install.ts";
+import { assetFor, installBridge } from "../src/install.ts";
+import type { BridgeRelease } from "../src/types/bridge.ts";
 
 const binary = Buffer.from("#!/bin/sh\necho whatsapp-mcp\n");
 const sha256 = createHash("sha256").update(binary).digest("hex");

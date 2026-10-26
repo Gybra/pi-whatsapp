@@ -4,7 +4,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { createSessionSigner } from "../src/approval.ts";
-import { decodeDraft, type ReviewedDraft } from "../src/protocol.ts";
+import { decodeDraft } from "../src/protocol.ts";
+import type { ReviewedDraft } from "../src/types/approval.ts";
 import { DraftReview, escapeReviewText, reviewDraft } from "../src/review.ts";
 import { textPayload, wireFor } from "./helpers.ts";
 

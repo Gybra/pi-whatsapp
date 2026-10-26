@@ -4,11 +4,12 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { setup, type Deps } from "../extensions/index.ts";
+import { setup } from "../extensions/index.ts";
 import { createSessionSigner } from "../src/approval.ts";
-import { BridgeError, type BridgeClient } from "../src/bridge-client.ts";
-import type { BridgeRelease } from "../src/install.ts";
-import type { SessionSigner } from "../src/protocol.ts";
+import { BridgeError } from "../src/bridge-client.ts";
+import type { SessionSigner } from "../src/types/approval.ts";
+import type { BridgeClient, BridgeRelease } from "../src/types/bridge.ts";
+import type { Deps } from "../src/types/extension.ts";
 import { fakeBridge } from "./fake-bridge.ts";
 import { textPayload, wireFor } from "./helpers.ts";
 

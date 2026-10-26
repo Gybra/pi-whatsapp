@@ -1,5 +1,5 @@
 import { Agent, request } from "node:http";
-import type { SendInput } from "./protocol.ts";
+import type { BridgeClient, BridgeState, RuntimeStatus } from "./types/bridge.ts";
 
 // The bridge listens on this fixed loopback address and rejects any other Host header.
 const API_HOST = "127.0.0.1:8080";
@@ -9,23 +9,6 @@ const TIMEOUT_MS = 180_000;
 const DRAFT_ID = /^[0-9a-f]{32}$/;
 /** The bridge's connection states, as reported by its API and by `whatsapp-mcp status`. */
 export const BRIDGE_STATES = ["stopped", "unpaired", "connecting", "online", "offline", "action_required"] as const;
-
-export type BridgeState = (typeof BRIDGE_STATES)[number];
-
-export type RuntimeStatus = {
-  state: BridgeState;
-  connected: boolean;
-  approver_id: string;
-};
-
-export type BridgeClient = {
-  status(signal?: AbortSignal): Promise<RuntimeStatus>;
-  /** Returns the bridge's draft as received; callers validate it with decodeDraft. */
-  prepare(input: SendInput, signal: AbortSignal): Promise<unknown>;
-  cancel(draftID: string, signal?: AbortSignal): Promise<void>;
-  revoke(signal?: AbortSignal): Promise<void>;
-  preview(draftID: string, signal: AbortSignal): Promise<Uint8Array>;
-};
 
 /** A failed bridge call. `code` is the bridge's fixed error code, or a local one such as "unreachable". */
 export class BridgeError extends Error {

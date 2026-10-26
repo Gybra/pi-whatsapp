@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { createPublicKey, verify } from "node:crypto";
 import test from "node:test";
 import { createApprovalController, createSessionSigner, isOutgoingWhatsAppCall, toSendInput } from "../src/approval.ts";
-import { BridgeError, type BridgeClient } from "../src/bridge-client.ts";
-import type { ReviewedDraft, SendInput, SessionSigner } from "../src/protocol.ts";
+import { BridgeError } from "../src/bridge-client.ts";
+import type { ReviewedDraft, SendInput, SessionSigner } from "../src/types/approval.ts";
+import type { BridgeClient } from "../src/types/bridge.ts";
 import { wireFor } from "./helpers.ts";
 
 const NOW = 1_800_000_000;

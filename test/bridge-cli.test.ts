@@ -3,7 +3,8 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { bridgeStatus, BridgeCommandError, pairPi, runBridgeCommand, runBridgeInTerminal, startLink, type LinkEvent } from "../src/bridge-cli.ts";
+import { bridgeStatus, BridgeCommandError, pairPi, runBridgeCommand, runBridgeInTerminal, startLink } from "../src/bridge-cli.ts";
+import type { LinkEvent } from "../src/types/bridge.ts";
 import { fakeBridge, STATUS } from "./fake-bridge.ts";
 
 const posix = { skip: process.platform === "win32" };

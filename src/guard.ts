@@ -3,7 +3,7 @@
 // process running as the user can still reach these files; this only stops the
 // direct routes a prompt-injected model would try first.
 
-export type GuardPaths = { dataDir: string; installDir: string; configFile: string };
+type GuardPaths = { dataDir: string; installDir: string; configFile: string };
 
 const PATH_TOOLS = new Set(["read", "write", "edit", "ls", "find", "grep"]);
 const COMMAND_TOOLS = new Set(["bash", "powershell"]);

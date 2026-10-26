@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { access, lstat, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
+import type { ConfiguredServer } from "./types/extension.ts";
 
 const APP_NAME = "whatsapp-mcp";
 
@@ -31,9 +32,7 @@ export async function loadBridgeToken(dataDir = bridgeDataDir()): Promise<Uint8A
   return Buffer.from(text, "hex");
 }
 
-export type ExtensionConfig = { bridgePath: string };
-
-export type ConfiguredServer = { source: string; command?: unknown; args?: unknown };
+type ExtensionConfig = { bridgePath: string };
 
 export function configPath(agentDir: string): string {
   return join(agentDir, "pi-whatsapp.json");

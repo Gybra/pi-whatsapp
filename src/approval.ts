@@ -1,7 +1,9 @@
 import { createHash, createPublicKey, generateKeyPairSync, sign as ed25519Sign, type KeyObject } from "node:crypto";
-import type { ExtensionContext, ToolCallEvent, ToolCallEventResult } from "@earendil-works/pi-coding-agent";
-import { BridgeError, type BridgeClient } from "./bridge-client.ts";
-import { decodeDraft, type ApprovalProof, type ReviewedDraft, type SendInput, type SessionSigner } from "./protocol.ts";
+import type { ExtensionContext, ToolCallEventResult } from "@earendil-works/pi-coding-agent";
+import { BridgeError } from "./bridge-client.ts";
+import { decodeDraft } from "./protocol.ts";
+import type { ApprovalController, ApprovalProof, ReviewedDraft, SendInput, SessionSigner } from "./types/approval.ts";
+import type { BridgeClient } from "./types/bridge.ts";
 
 /**
  * Holds this Pi session's approval key. The private key lives only in this closure:
@@ -55,12 +57,7 @@ export function toSendInput(toolName: string, input: Record<string, unknown>): S
   return undefined;
 }
 
-export type Review = (ctx: ExtensionContext, draft: ReviewedDraft, signal: AbortSignal, preview?: Uint8Array) => Promise<boolean>;
-
-export type ApprovalController = {
-  handle(event: ToolCallEvent, ctx: ExtensionContext): Promise<ToolCallEventResult | undefined>;
-  cancelAll(): Promise<void>;
-};
+type Review = (ctx: ExtensionContext, draft: ReviewedDraft, signal: AbortSignal, preview?: Uint8Array) => Promise<boolean>;
 
 const NOT_SENT = "Nothing was sent.";
 
