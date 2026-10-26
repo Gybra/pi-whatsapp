@@ -1,12 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { BridgeRelease } from "./types.ts";
 
 // Each pi-whatsapp release pins the SHA-256 of the matching whatsapp-mcp binaries
 // (bridge-release.json, published to npm). The binary comes from GitHub Releases,
 // so tampering would need both npm and GitHub to be compromised.
-
-export type BridgeRelease = { version: string | null; assets: Record<string, { file: string; sha256: string }> };
 
 const MAX_BINARY_BYTES = 100 * 1024 * 1024;
 const OS_NAMES: Partial<Record<NodeJS.Platform, string>> = { darwin: "darwin", linux: "linux", win32: "windows" };

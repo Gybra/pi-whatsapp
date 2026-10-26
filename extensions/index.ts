@@ -1,27 +1,16 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext, type ToolCallEventResult } from "@earendil-works/pi-coding-agent";
-import { createApprovalController, createSessionSigner, isOutgoingWhatsAppCall, type ApprovalController } from "../src/approval.ts";
+import { createApprovalController, createSessionSigner, isOutgoingWhatsAppCall } from "../src/approval.ts";
 import { bridgeStatus, pairPi, runBridgeCommand, startLink } from "../src/bridge-cli.ts";
-import { createBridgeClient, type BridgeClient } from "../src/bridge-client.ts";
+import { createBridgeClient } from "../src/bridge-client.ts";
 import { bridgeDataDir, checkBridgeExecutable, configPath, findConfiguredServer, isSameBridge, loadBridgeToken, loadConfig, saveConfig } from "../src/config.ts";
 import { protectedToolCall } from "../src/guard.ts";
-import { assetFor, installBridge, type BridgeRelease } from "../src/install.ts";
+import { assetFor, installBridge } from "../src/install.ts";
 import { runLinkScreen } from "../src/link-view.ts";
-import type { SessionSigner } from "../src/protocol.ts";
 import { reviewDraft } from "../src/review.ts";
+import type { ApprovalController, BridgeClient, BridgeRelease, Deps, SessionSigner } from "../src/types.ts";
 import { uninstallWhatsApp } from "../src/uninstall.ts";
-
-export type Deps = {
-  agentDir: string;
-  dataDir(): string;
-  release: BridgeRelease;
-  platform: NodeJS.Platform;
-  arch: string;
-  fetchImpl?: typeof fetch;
-  createSigner(): SessionSigner;
-  connect(): BridgeClient | Promise<BridgeClient>;
-};
 
 const defaultDeps = (): Deps => ({
   agentDir: getAgentDir(),

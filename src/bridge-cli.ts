@@ -1,32 +1,9 @@
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
-import { BRIDGE_STATES, type BridgeState } from "./bridge-client.ts";
+import { BRIDGE_STATES } from "./bridge-client.ts";
+import type { BridgeOutcome, BridgeState, BridgeStatus, LinkEvent, LinkProcess } from "./types.ts";
 
 // Runs the installed whatsapp-mcp executable directly, never through a shell.
-
-export type BridgeStatus = {
-  version: string;
-  running: boolean;
-  state: BridgeState;
-  connected: boolean;
-  linked: boolean;
-  approver_id: string;
-  autostart: boolean;
-  data_dir: string;
-  log_file: string;
-};
-
-export type LinkEvent = { event: "qr"; modules: string[]; expires_in: number } | { event: "notice" | "linked"; message: string } | { event: "confirm_code"; code: string; message: string };
-
-/** How a bridge command ended; `error` is the bridge's own message. */
-export type BridgeOutcome = { ok: true } | { ok: false; error: string };
-
-export type LinkProcess = {
-  /** Answers a confirm_code event. */
-  answer(confirmed: boolean): void;
-  cancel(): void;
-  done: Promise<BridgeOutcome>;
-};
 
 export class BridgeCommandError extends Error {}
 

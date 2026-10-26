@@ -2,14 +2,15 @@ import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { runBridgeCommand, runBridgeInTerminal, type BridgeOutcome } from "./bridge-cli.ts";
-import { checkBridgeExecutable, configPath, findConfiguredServer, loadConfig, type ConfiguredServer } from "./config.ts";
+import { runBridgeCommand, runBridgeInTerminal } from "./bridge-cli.ts";
+import { checkBridgeExecutable, configPath, findConfiguredServer, loadConfig } from "./config.ts";
+import type { BridgeOutcome, ConfiguredServer } from "./types.ts";
 
 // Undoes /whatsapp-setup. The bridge's own `uninstall` stops it and removes its login
 // service; this removes only what the extension created, never mcp.json or a bridge the
 // user supplied. Each step is safe to repeat, so a failed run can simply be run again.
 
-export type UninstallPaths = { agentDir: string; installDir: string; dataDir: string };
+type UninstallPaths = { agentDir: string; installDir: string; dataDir: string };
 
 /** What /whatsapp-setup left on this computer. */
 type Installation = {

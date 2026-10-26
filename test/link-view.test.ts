@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import type { LinkEvent, LinkProcess } from "../src/bridge-cli.ts";
+import type { LinkEvent, LinkProcess } from "../src/types.ts";
 import { renderQRLines, runLinkScreen } from "../src/link-view.ts";
 
 const KEYS = { enter: "\r", escape: "\x1b" };

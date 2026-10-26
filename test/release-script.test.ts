@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { promisify } from "node:util";
-import { assetFor, type BridgeRelease } from "../src/install.ts";
+import { assetFor } from "../src/install.ts";
+import type { BridgeRelease } from "../src/types.ts";
 
 const run = promisify(execFile);
 const script = fileURLToPath(new URL("../scripts/update-bridge-release.mjs", import.meta.url));

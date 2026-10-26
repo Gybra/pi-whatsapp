@@ -1,6 +1,6 @@
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
-import type { LinkEvent, LinkProcess } from "./bridge-cli.ts";
+import type { LinkEvent, LinkProcess } from "./types.ts";
 
 type Phase =
   | { kind: "starting" }

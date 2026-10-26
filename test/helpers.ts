@@ -9,7 +9,7 @@ export function keyFromSeed(seedHex: string): KeyObject {
   return createPrivateKey({ key: Buffer.concat([PKCS8_ED25519_PREFIX, Buffer.from(seedHex, "hex")]), format: "der", type: "pkcs8" });
 }
 
-export type Fixture = {
+type Fixture = {
   now: number;
   public_key_b64: string;
   approver_id: string;

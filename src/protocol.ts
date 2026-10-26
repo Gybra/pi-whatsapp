@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ApprovalPayload, AttachmentView, ReviewedDraft, SendKind, SessionSigner } from "./types.ts";
 
 // Wire format of the bridge's approval protocol v1 (whatsapp-mcp docs/approval-protocol-v1.md).
 // Drafts are parsed from the exact bytes the bridge will send, never rebuilt locally.
@@ -6,38 +7,9 @@ export const APPROVAL_DOMAIN = "whatsapp-mcp/approval/v1";
 const MAX_MESSAGE_BYTES = 32 * 1024;
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 const MAX_PAYLOAD_BYTES = 256 * 1024; // message plus worst-case JSON escaping
-const KINDS = ["text", "file", "voice"] as const;
+export const KINDS = ["text", "file", "voice"] as const;
 const HEX32 = /^[0-9a-f]{32}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
-
-export type SendKind = (typeof KINDS)[number];
-
-export type SendInput = { kind: SendKind; recipient: string; message: string; media_id: string };
-
-export type AttachmentView = { id: string; name: string; mime: string; size: number; sha256: string };
-
-export type ApprovalPayload = {
-  version: 1;
-  draft_id: string;
-  recipient_jid: string;
-  message: string;
-  kind: SendKind;
-  attachment: AttachmentView | null;
-  expires_at: number;
-};
-
-export type DraftView = { draft_id: string; payload_b64: string; challenge_b64: string; approver_id: string; expires_at: number };
-
-export type ApprovalProof = { draft_id: string; signature_b64: string };
-
-export type SessionSigner = {
-  readonly publicKeyB64: string;
-  readonly approverID: string;
-  sign(challenge: Uint8Array): string;
-  dispose(): void;
-};
-
-export type ReviewedDraft = { wire: DraftView; payload: ApprovalPayload; payloadBytes: Uint8Array; challengeBytes: Uint8Array };
 
 /** Validates a bridge draft for this session's signer. Throws on anything unexpected. */
 export function decodeDraft(wire: unknown, signer: SessionSigner, nowSeconds: number): ReviewedDraft {

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi, type Component, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
-import type { AttachmentView, ReviewedDraft } from "./protocol.ts";
+import type { AttachmentView, ReviewedDraft } from "./types.ts";
 
 const INLINE_TEXT_LIMIT = 64 * 1024;
 const KIND_LABEL = { text: "message", file: "file", voice: "voice message" } as const;
