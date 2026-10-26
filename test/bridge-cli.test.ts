@@ -16,6 +16,12 @@ test("reports the bridge's error message, without stack noise", posix, async () 
   await assert.rejects(runBridgeCommand(bridge, ["link"]), (e: unknown) => e instanceof BridgeCommandError && e.message === "the bridge is running; stop it first");
 });
 
+test("reports a bridge that exits before reading its input, without crashing", posix, async () => {
+  const bridge = fakeBridge(`console.error("Error: the bridge did not stop"); process.exit(1)`);
+  // Larger than a pipe buffer, so the write is still pending when the bridge exits.
+  await assert.rejects(runBridgeCommand(bridge, ["uninstall"], { input: "x".repeat(4 * 1024 * 1024) }), /the bridge did not stop/);
+});
+
 test("times out a hanging command", posix, async () => {
   const bridge = fakeBridge(`await new Promise(() => setInterval(() => {}, 1000))`);
   await assert.rejects(runBridgeCommand(bridge, ["status"], { timeoutMs: 200 }), /did not respond/);
