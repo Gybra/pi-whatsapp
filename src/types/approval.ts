@@ -3,7 +3,7 @@ import type { KINDS } from "../protocol.ts";
 
 export type SendKind = (typeof KINDS)[number];
 
-export type SendInput = { kind: SendKind; recipient: string; message: string; media_id: string };
+export type SendInput = { kind: SendKind; recipient: string; message: string; media_id: string; options: string[] };
 
 export type AttachmentView = { id: string; name: string; mime: string; size: number; sha256: string };
 
@@ -13,6 +13,7 @@ export type ApprovalPayload = {
   recipient_jid: string;
   message: string;
   kind: SendKind;
+  options: string[] | null;
   attachment: AttachmentView | null;
   expires_at: number;
 };

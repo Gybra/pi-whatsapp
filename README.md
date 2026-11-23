@@ -19,7 +19,7 @@ It needs the [whatsapp-mcp](https://github.com/Gybra/whatsapp-mcp) bridge, which
 - The **whatsapp-mcp bridge** (a separate Go program) connects to your WhatsApp account and serves the WhatsApp tools to Pi over MCP. It refuses to send anything without a signed approval for that exact message.
 - **This extension** shows you each outgoing message in full before it is sent. Choosing *Approve and send* signs that one message with a key that exists only in this Pi process.
 
-Reading and searching need no approval. Every text, file or voice message does, one at a time:
+Reading and searching need no approval. Every text, file, voice message or poll does, one at a time:
 
 1. Pi asks to send a message.
 2. The bridge freezes the exact recipient, text and attachment bytes.

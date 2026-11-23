@@ -53,8 +53,13 @@ export function textPayload(overrides: Record<string, unknown> = {}) {
     recipient_jid: "12025550123@s.whatsapp.net",
     message: "hello",
     kind: "text",
+    options: null,
     attachment: null,
     expires_at: 2_000_000_000,
     ...overrides,
   };
+}
+
+export function pollPayload(overrides: Record<string, unknown> = {}) {
+  return textPayload({ kind: "poll", message: "Which one?", options: ["Yes", "No"], ...overrides });
 }

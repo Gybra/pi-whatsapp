@@ -7,7 +7,7 @@ import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi, type Component, typ
 import type { AttachmentView, ReviewedDraft } from "./types/approval.ts";
 
 const INLINE_TEXT_LIMIT = 64 * 1024;
-const KIND_LABEL = { text: "message", file: "file", voice: "voice message" } as const;
+const KIND_LABEL = { text: "message", file: "file", voice: "voice message", poll: "poll" } as const;
 // An overlay gets the whole terminal height: in Pi's editor dock the bottom rows would be clipped and PgUp/PgDn taken.
 const REVIEW_OVERLAY = { overlay: true, overlayOptions: { width: "100%", maxHeight: "100%", anchor: "bottom-left" } } as const;
 
@@ -210,6 +210,8 @@ function reviewLines(draft: ReviewedDraft, preview?: PreparedPreview): ReviewLin
   const inline = preview?.inline === undefined ? undefined : escapeReviewText(preview.inline);
   const lines: ReviewLine[] = [{ text: `Send this ${KIND_LABEL[p.kind]} to: ${recipient.text}`, tone: "title" }];
   let hidden = recipient.hidden + message.hidden + (inline?.hidden ?? 0);
+  const options = (p.options ?? []).map((option) => escapeReviewText(option));
+  for (const option of options) hidden += option.hidden;
   if (p.attachment) {
     const name = escapeReviewText(p.attachment.name);
     const mime = escapeReviewText(p.attachment.mime);
@@ -221,9 +223,13 @@ function reviewLines(draft: ReviewedDraft, preview?: PreparedPreview): ReviewLin
   if (hidden > 0) {
     lines.push({ text: `⚠ Contains ${hidden} hidden or control characters, shown as ⟨U+…⟩. Check them before approving.`, tone: "warning" });
   }
-  lines.push({ text: "" }, { text: p.kind === "text" ? "Message:" : "Caption:", tone: "muted" });
+  lines.push({ text: "" }, { text: p.kind === "poll" ? "Question:" : p.kind === "text" ? "Message:" : "Caption:", tone: "muted" });
   if (p.message === "") lines.push({ text: "(no caption)", tone: "muted" });
   for (const line of p.message === "" ? [] : message.text.split("\n")) lines.push({ text: line, quoted: true });
+  if (p.kind === "poll") {
+    lines.push({ text: "" }, { text: `Options (${options.length}, single choice):`, tone: "muted" });
+    options.forEach((option, index) => lines.push({ text: `${index + 1}. ${option.text}`, quoted: true }));
+  }
   if (inline) {
     lines.push({ text: "" }, { text: "Attachment content:", tone: "muted" });
     for (const line of inline.text.split("\n")) lines.push({ text: line, quoted: true });

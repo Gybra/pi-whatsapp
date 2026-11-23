@@ -6,7 +6,7 @@ import test from "node:test";
 import { BridgeError, createBridgeClient } from "../src/bridge-client.ts";
 
 const TOKEN = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
-const INPUT = { kind: "text", recipient: "12025550123", message: "hi", media_id: "" } as const;
+const INPUT = { kind: "text", recipient: "12025550123", message: "hi", media_id: "", options: [] as string[] } as const;
 
 type Seen = { method?: string; url?: string; headers: IncomingMessage["headers"]; body: string };
 

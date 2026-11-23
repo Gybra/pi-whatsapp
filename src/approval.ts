@@ -35,6 +35,7 @@ export function createProof(draft: ReviewedDraft, signer: SessionSigner, nowSeco
 
 const OUTGOING_TOOLS = {
   mcp__whatsapp__send_message: "text",
+  mcp__whatsapp__send_poll: "poll",
   mcp__whatsapp__send_file: "file",
   mcp__whatsapp__send_audio_message: "voice",
 } as const;
@@ -49,10 +50,13 @@ export function toSendInput(toolName: string, input: Record<string, unknown>): S
   const { approval: _ignored, ...args } = input;
   const keys = Object.keys(args).sort().join();
   if (kind === "text" && keys === "message,recipient" && typeof args.recipient === "string" && typeof args.message === "string") {
-    return { kind, recipient: args.recipient, message: args.message, media_id: "" };
+    return { kind, recipient: args.recipient, message: args.message, media_id: "", options: [] };
+  }
+  if (kind === "poll" && keys === "options,question,recipient" && typeof args.recipient === "string" && typeof args.question === "string" && Array.isArray(args.options) && args.options.every((o) => typeof o === "string")) {
+    return { kind, recipient: args.recipient, message: args.question, media_id: "", options: args.options as string[] };
   }
   if ((kind === "file" || kind === "voice") && keys === "media_id,recipient" && typeof args.recipient === "string" && typeof args.media_id === "string") {
-    return { kind, recipient: args.recipient, message: "", media_id: args.media_id };
+    return { kind, recipient: args.recipient, message: "", media_id: args.media_id, options: [] };
   }
   return undefined;
 }
