@@ -7,7 +7,12 @@ export const APPROVAL_DOMAIN = "whatsapp-mcp/approval/v1";
 const MAX_MESSAGE_BYTES = 32 * 1024;
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 const MAX_PAYLOAD_BYTES = 256 * 1024; // message plus worst-case JSON escaping
-export const KINDS = ["text", "file", "voice"] as const;
+// WhatsApp's own poll limits; the bridge rejects anything outside them.
+const POLL_MIN_OPTIONS = 2;
+const POLL_MAX_OPTIONS = 12;
+const POLL_OPTION_BYTES = 100;
+const POLL_QUESTION_BYTES = 255;
+export const KINDS = ["text", "file", "voice", "poll"] as const;
 const HEX32 = /^[0-9a-f]{32}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -49,7 +54,7 @@ function parsePayload(bytes: Buffer): ApprovalPayload {
   } catch {
     fail("payload is not UTF-8 JSON");
   }
-  if (!hasExactKeys(value, ["attachment", "draft_id", "expires_at", "kind", "message", "recipient_jid", "version"])) fail("unexpected payload fields");
+  if (!hasExactKeys(value, ["attachment", "draft_id", "expires_at", "kind", "message", "options", "recipient_jid", "version"])) fail("unexpected payload fields");
   const p = value as Record<string, unknown>;
   const valid =
     p.version === 1 &&
@@ -57,10 +62,21 @@ function parsePayload(bytes: Buffer): ApprovalPayload {
     typeof p.recipient_jid === "string" && p.recipient_jid !== "" &&
     typeof p.message === "string" && Buffer.byteLength(p.message) <= MAX_MESSAGE_BYTES &&
     Number.isSafeInteger(p.expires_at) &&
-    KINDS.includes(p.kind as SendKind);
+    KINDS.includes(p.kind as SendKind) &&
+    (p.kind === "poll" ? isPoll(p) : p.options === null);
   if (!valid) fail("payload values");
-  if (p.kind === "text" ? p.attachment !== null || p.message === "" : !isAttachment(p.attachment)) fail("payload kind and attachment");
+  const noAttachment = p.attachment === null && p.message !== "";
+  if (p.kind === "text" || p.kind === "poll" ? !noAttachment : !isAttachment(p.attachment)) fail("payload kind and attachment");
   return p as ApprovalPayload;
+}
+
+/** A poll: a short question in `message` and 2-12 distinct, short options. */
+function isPoll(p: Record<string, unknown>): boolean {
+  const options = p.options;
+  if (Buffer.byteLength(p.message as string) > POLL_QUESTION_BYTES) return false;
+  if (!Array.isArray(options) || options.length < POLL_MIN_OPTIONS || options.length > POLL_MAX_OPTIONS) return false;
+  if (!options.every((o) => typeof o === "string" && o !== "" && Buffer.byteLength(o) <= POLL_OPTION_BYTES)) return false;
+  return new Set(options.map((o: string) => o.trim().toLowerCase())).size === options.length;
 }
 
 function isAttachment(value: unknown): value is AttachmentView {

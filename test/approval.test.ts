@@ -20,7 +20,7 @@ function fakeClient(signer: SessionSigner, overrides: Partial<BridgeClient> = {}
       calls.prepare.push(input);
       const draft_id = (++counter).toString(16).padStart(32, "0");
       const attachment = input.kind === "text" ? null : { id: input.media_id, name: input.media_id, mime: "application/pdf", size: 3, sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81" };
-      const payload = { version: 1, draft_id, recipient_jid: `${input.recipient}@s.whatsapp.net`, message: input.message, kind: input.kind, attachment, expires_at: NOW + 120 };
+      const payload = { version: 1, draft_id, recipient_jid: `${input.recipient}@s.whatsapp.net`, message: input.message, kind: input.kind, options: input.kind === "poll" ? input.options : null, attachment, expires_at: NOW + 120 };
       return wireFor(payload, signer.publicKeyB64);
     },
     async cancel(id) {
@@ -61,13 +61,23 @@ function verifyProof(signer: SessionSigner, draft: ReviewedDraft, signatureB64: 
   return verify(null, draft.challengeBytes, key, Buffer.from(signatureB64, "base64"));
 }
 
-test("maps exactly the three outgoing tools to send inputs", () => {
+test("maps exactly the four outgoing tools to send inputs", () => {
   assert.equal(isOutgoingWhatsAppCall({ toolName: "mcp__whatsapp__list_chats" }), false);
-  assert.deepEqual(toSendInput("mcp__whatsapp__send_message", { recipient: "1", message: "hi" }), { kind: "text", recipient: "1", message: "hi", media_id: "" });
-  assert.deepEqual(toSendInput("mcp__whatsapp__send_file", { recipient: "1", media_id: "a.pdf" }), { kind: "file", recipient: "1", message: "", media_id: "a.pdf" });
-  assert.deepEqual(toSendInput("mcp__whatsapp__send_audio_message", { recipient: "1", media_id: "v.ogg", approval: {} }), { kind: "voice", recipient: "1", message: "", media_id: "v.ogg" });
+  assert.deepEqual(toSendInput("mcp__whatsapp__send_message", { recipient: "1", message: "hi" }), { kind: "text", recipient: "1", message: "hi", media_id: "", options: [] });
+  assert.deepEqual(toSendInput("mcp__whatsapp__send_poll", { recipient: "1", question: "Which?", options: ["Yes", "No"] }), { kind: "poll", recipient: "1", message: "Which?", media_id: "", options: ["Yes", "No"] });
+  assert.deepEqual(toSendInput("mcp__whatsapp__send_file", { recipient: "1", media_id: "a.pdf" }), { kind: "file", recipient: "1", message: "", media_id: "a.pdf", options: [] });
+  assert.deepEqual(toSendInput("mcp__whatsapp__send_audio_message", { recipient: "1", media_id: "v.ogg", approval: {} }), { kind: "voice", recipient: "1", message: "", media_id: "v.ogg", options: [] });
   for (const bad of [{ recipient: "1", media_path: "/etc/passwd" }, { recipient: "1" }, { recipient: 1, media_id: "a" }, { recipient: "1", media_id: "a", caption: "x" }]) {
     assert.equal(toSendInput("mcp__whatsapp__send_file", bad), undefined, JSON.stringify(bad));
+  }
+  // A poll must carry a question and a list of string options, and nothing else.
+  for (const bad of [
+    { recipient: "1", question: "Which?" },
+    { recipient: "1", question: "Which?", options: "Yes" },
+    { recipient: "1", question: "Which?", options: ["Yes", 2] },
+    { recipient: "1", question: "Which?", options: ["Yes", "No"], caption: "x" },
+  ]) {
+    assert.equal(toSendInput("mcp__whatsapp__send_poll", bad), undefined, JSON.stringify(bad));
   }
 });
 
@@ -220,7 +230,7 @@ test("explains bridge failures without retrying", async () => {
 test("rejects a draft that is not bound to this session's key", async () => {
   const other = createSessionSigner();
   const { controller, reviews } = setup({
-    client: { prepare: async (input) => wireFor({ version: 1, draft_id: "1".repeat(32), recipient_jid: "x@s.whatsapp.net", message: input.message, kind: "text", attachment: null, expires_at: NOW + 120 }, other.publicKeyB64) },
+    client: { prepare: async (input) => wireFor({ version: 1, draft_id: "1".repeat(32), recipient_jid: "x@s.whatsapp.net", message: input.message, kind: "text", options: null, attachment: null, expires_at: NOW + 120 }, other.publicKeyB64) },
   });
   assert.equal((await controller.handle(sendEvent({ recipient: "12025550123", message: "hi" }) as never, tuiCtx()))?.block, true);
   assert.equal(reviews.length, 0);

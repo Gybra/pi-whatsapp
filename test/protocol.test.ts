@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { createProof, createSessionSigner } from "../src/approval.ts";
 import { decodeDraft } from "../src/protocol.ts";
-import { fixture, fixtureWire, keyFromSeed, RFC_TEST_SEED, textPayload, wireFor } from "./helpers.ts";
+import { fixture, fixtureWire, keyFromSeed, pollPayload, RFC_TEST_SEED, textPayload, wireFor } from "./helpers.ts";
 
 const NOW = 1_800_000_000;
 const rfcSigner = () => createSessionSigner(keyFromSeed(RFC_TEST_SEED));
@@ -75,13 +75,24 @@ test("rejects malformed draft wire objects", () => {
 test("validates the reviewed payload", () => {
   const signer = rfcSigner();
   assert.equal(decodeDraft(wireFor(textPayload(), signer.publicKeyB64), signer, NOW).payload.message, "hello");
+  assert.deepEqual(decodeDraft(wireFor(pollPayload(), signer.publicKeyB64), signer, NOW).payload.options, ["Yes", "No"]);
 
   const attachment = { id: "a.pdf", name: "a.pdf", mime: "application/pdf", size: 3, sha256: "a".repeat(64) };
   const cases: Record<string, Uint8Array | object> = {
     "version 2": textPayload({ version: 2 }),
     "unknown field": textPayload({ approved: true }),
     "missing field": { ...textPayload(), attachment: undefined },
-    "unknown kind": textPayload({ kind: "poll" }),
+    "unknown kind": textPayload({ kind: "sticker" }),
+    "poll with attachment": pollPayload({ attachment }),
+    "poll without options": pollPayload({ options: null }),
+    "poll with one option": pollPayload({ options: ["Yes"] }),
+    "poll with thirteen options": pollPayload({ options: Array.from({ length: 13 }, (_, i) => `o${i}`) }),
+    "poll with empty option": pollPayload({ options: ["Yes", ""] }),
+    "poll with 101 byte option": pollPayload({ options: ["Yes", "x".repeat(101)] }),
+    "poll with duplicate options": pollPayload({ options: ["Yes", " yes "] }),
+    "poll with over-long question": pollPayload({ message: "q".repeat(256) }),
+    "poll with empty question": pollPayload({ message: "" }),
+    "text with options": textPayload({ options: ["Yes", "No"] }),
     "text with attachment": textPayload({ attachment }),
     "file without attachment": textPayload({ kind: "file" }),
     "empty text": textPayload({ message: "" }),
